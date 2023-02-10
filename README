@@ -1,0 +1,21 @@
+
+## To download the data use the following command.
+lftp -c 'set net:idle 10
+>          set net:max-retries 0
+>          set net:reconnect-interval-base 3
+>          set net:reconnect-interval-max 3
+>          pget -n 10 -c "https://zenodo.org/record/7105232/files/OLIVES.zip?download=1"' -o OLIVES.zip
+
+## Unzip the data.
+unzip OLIVES.zip
+cd OLIVES
+unzip Prime_FULL.zip
+
+## We are only going to use Prime_FULL data, so we can remove both the zip files after unzip prime_full
+# rm Prime_FULL.zip TREX_DME.zip            ## Uncomment this for removing the zip files.
+
+
+## To prep the data use the following command.
+python dataloader.py --data_root /usr/scratch/abhimanyu/courses/ECE8803_FML/OLIVES
+
+
