@@ -29,7 +29,6 @@ def train(args, batched_trainset, batched_testset, num_class):
     rnet18.fc = nn.Linear(k, num_class)
     rnet18 = rnet18.to(device)
 
-    print(device)
     start = time.time()
     for epoch in range(args.epoch):
         print("Running Epoch: ", epoch, "/", args.epoch,  " with learning rate: ", args.lr, " and momentum: ", args.momentum)
@@ -41,7 +40,6 @@ def train(args, batched_trainset, batched_testset, num_class):
         epoch_loss = 0
 
         for batch_id, (train_data, label) in enumerate(batched_trainset):
-            print(train_data.shape)
             train_data = train_data.to(device)
             label = label.to(device)
 
@@ -54,7 +52,6 @@ def train(args, batched_trainset, batched_testset, num_class):
             optimizer.step()
 
             epoch_loss += loss.item() * train_data.size(0)
-            print(train_data.size(0))
             correct_num += torch.sum(prediction==label)
 
         epoch_loss = epoch_loss / len(batched_trainset)
@@ -119,7 +116,6 @@ if __name__ == '__main__':
     
     batched_trainset, batched_testset = dataloader.dataloader(args)    
 
-    # print(batched_trainset[1][0].shape)
     print(len(batched_trainset), len(batched_testset))
 
     train(args, batched_trainset, batched_testset, 3)
