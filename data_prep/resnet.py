@@ -100,8 +100,6 @@ def parse_args():
     parser.add_argument('--batch_size', type = int, default = 1)
     parser.add_argument('--save_pth', type = str, default = '../models/')
 
-
-
     return parser.parse_args()
 
 
