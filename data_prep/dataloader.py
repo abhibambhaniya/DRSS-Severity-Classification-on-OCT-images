@@ -23,9 +23,15 @@ mean = (.1706)
 std = (.2112)
 normalize = transforms.Normalize(mean=mean, std=std)
 
-transform = transforms.Compose([
+transform_resnet = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.Grayscale(num_output_channels=3), # to compatible with resnet
+    transforms.ToTensor(),
+    normalize,
+])
+
+transform = transforms.Compose([
+    transforms.Resize(size=(224,224)),
     transforms.ToTensor(),
     normalize,
 ])
@@ -61,9 +67,13 @@ class OCTDataset(Dataset):
         return len(self._labels)     
 
 
-def dataloader(args):
-    trainset = OCTDataset(args, 'train', transform=transform)
-    testset = OCTDataset(args, 'test', transform=transform)
+def dataloader(args, model_name):
+    if (model_name == 'ResNet'):
+        trainset = OCTDataset(args, 'train', transform=transform_resnet)
+        testset = OCTDataset(args, 'test', transform=transform_resnet)
+    else:
+        trainset = OCTDataset(args, 'train', transform=transform)
+        testset = OCTDataset(args, 'test', transform=transform)
 
     if (args.batch_size != 1):
         batched_trainset = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)

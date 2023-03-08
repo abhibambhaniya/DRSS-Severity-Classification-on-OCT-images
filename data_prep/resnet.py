@@ -56,7 +56,7 @@ def train(args, batched_trainset, batched_testset, num_class):
 
         epoch_loss = epoch_loss / len(batched_trainset)
         epoch_accuracy = correct_num / len(batched_trainset)
-        print("Epoch: ", epoch, "/", args.epoch, " Training Loss: ", epoch_loss, " Accuracy: ", epoch_accuracy, 
+        print("Epoch: ", epoch + 1, "/", args.epoch, " Training Loss: ", epoch_loss, " Accuracy: ", epoch_accuracy, 
                " time spent: ", time.time() - start, " s")
 
 
@@ -80,7 +80,7 @@ def train(args, batched_trainset, batched_testset, num_class):
             test_loss = test_loss / len(batched_testset)
             test_accuracy = test_correct_num / len(batched_testset)
 
-        print("Epoch: ", epoch, "/", args.epoch, " Test Loss: ", test_loss, " Accuracy: ", test_accuracy, 
+        print("Epoch: ", epoch + 1, "/", args.epoch, " Test Loss: ", test_loss, " Accuracy: ", test_accuracy, 
                 " time spent: ", time.time() - start, " s")
 
     torch.save(rnet18.state_dict(), args.save_pth)
@@ -98,7 +98,7 @@ def parse_args():
     parser.add_argument('--momentum', type = int, default = 0.9)
     parser.add_argument('--epoch', type = int, default = 50)
     parser.add_argument('--batch_size', type = int, default = 1)
-    parser.add_argument('--save_pth', type = str, default = '../models/')
+    parser.add_argument('--save_pth', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
 
     return parser.parse_args()
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     name = os.path.join(args.save_pth, base_name)
     args.save_pth = os.path.abspath(name)
     
-    batched_trainset, batched_testset = dataloader.dataloader(args)    
+    batched_trainset, batched_testset = dataloader.dataloader(args, 'ResNet')    
 
     print(len(batched_trainset), len(batched_testset))
 
