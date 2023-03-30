@@ -63,16 +63,20 @@ class OCTDataset(Dataset):
 
         folder_path = self.root + self.path_list[index]
         
-        # there are 49 frames per volume ID, concatenate them here for 3D CNN
+        # there are maximum 49 frames per volume ID, concatenate them here for 3D CNN
+        # if certain frame did not exsit, simply take a copy of previous frame
         for i in range(0, 49): 
             tif = str(i) + '.tif'
             png = str(i) + '.png'
             
             if (os.path.isfile(os.path.join(folder_path, tif))):
                img = Image.open(os.path.join(folder_path, tif)).convert("L")
-            else:
+            elif (os.path.isfile(os.path.join(folder_path, png))):
                img = Image.open(os.path.join(folder_path, png)).convert("L")
-            
+            else:
+                img_volume.append(img_volume[i - 1])
+                continue
+
             if self.transform is not None:
                 img = self.transform(img)
 
@@ -98,6 +102,8 @@ def dataloader(args, model_name):
         trainset = OCTDataset(args, 'train', transform=transform)
         testset = OCTDataset(args, 'test', transform=transform)
 
+    print(len(trainset))
+    print(len(testset))
     if (args.batch_size != 1):
         batched_trainset = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
         batched_testset = DataLoader(testset, batch_size=args.batch_size, shuffle=True)
