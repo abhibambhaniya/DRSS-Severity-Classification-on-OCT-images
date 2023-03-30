@@ -1,139 +1,315 @@
-import numpy as np
-import torch
+# Taken from github repo: https://github.com/ellisdg/3DUnetCNN
+
+"""
+Modified from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
+"""
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import torch.optim as optim
-
-import torchvision
-from torchvision import models, transforms
-
-import dataloader
-
-import numpy as np
-import pandas as pd
-from PIL import Image
-import argparse
-import os
-import copy
-import time
-from tqdm import tqdm
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-def train(args, batched_trainset, batched_testset, num_class):
-
-    logfile = open(args.log, "w")
-
-    logfile.write(str(args))
-
-    rnet18 = models.resnet18(weights='DEFAULT')
-    
-    loss_fn = nn.CrossEntropyLoss() # loss function
-
-    if (args.opt == 'Adam'):
-        optimizer = optim.Adam(rnet18.parameters(), lr=args.lr)
-    elif (args.opt == 'SGD'):
-        optimizer = optim.SGD(rnet18.parameters(), lr=args.lr, momentum=args.momentum)
-    
-    k = rnet18.fc.in_features
-    rnet18.fc = nn.Linear(k, num_class)
-    rnet18 = rnet18.to(device)
-
-    start = time.time()
-    for epoch in range(args.epoch):
-        # print("Running Epoch: ", epoch+1, "/", args.epoch,  " with learning rate: ", args.lr, " and momentum: ", args.momentum)
-        
-        rnet18.train() # train phase
-
-        train_correct_num = 0
-        train_total_num = 0
-        train_loss = 0
-
-        for train_data, train_label in tqdm(batched_trainset, desc=f"Epoch {epoch+1}/{args.epoch}"):
-            train_data = train_data.to(device)
-            train_label = train_label.to(device)
-
-            optimizer.zero_grad()
-            out = rnet18(train_data)
-            _, prediction = torch.max(out, dim=1)
-
-            loss = loss_fn(out, train_label)
-            loss.backward()
-            optimizer.step()
-
-            train_loss += loss.item() * train_data.size(0)
-            train_correct_num += (prediction == train_label).sum().item()
-            train_total_num += train_label.size(0)
-
-        train_loss = train_loss / len(batched_trainset)
-        train_accuracy = train_correct_num / train_total_num
-
-        train_msg = f'Epoch: {epoch + 1}/{args.epoch} Train Loss: {train_loss}, Accuracy: {train_accuracy}, time spent: {time.time() - start} s'
-        print(train_msg)
-        logfile.write(train_msg)
-
-        rnet18.eval() # evaluation phase
-        with torch.no_grad():
-            test_loss = 0
-            test_correct_num = 0
-            test_total_num = 0
-
-            for test_data, test_label in batched_testset:
-                test_data = test_data.to(device)
-                test_label = test_label.to(device)
-
-                out = rnet18(test_data)
-
-                _, prediction = torch.max(out, 1)
-                loss = loss_fn(out, test_label)
-                test_loss += loss.item() * test_data.size(0)
-            
-                test_correct_num += (prediction == test_label).sum().item()
-                test_total_num += test_label.size(0)
-
-            test_loss = test_loss / len(batched_testset)
-            test_accuracy = test_correct_num / test_total_num
-
-            test_msg = f'Epoch: {epoch + 1}/{args.epoch} Test Loss: {test_loss}, Accuracy: {test_accuracy}, time spent: {time.time() - start} s'
-            print(test_msg)
-            logfile.write(test_msg)
-
-    torch.save(rnet18.state_dict(), args.save_pth)
-    logfile.close()
 
 
+__all__ = ['ResNet', 'resnet_18', 'resnet_34', 'resnet_50', 'resnet_101',
+           'resnet_152', 'resnext_50_32x4d', 'resnext_101_32x8d', 'conv3x3x3',
+           'conv1x1x1']
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train.csv')
-    parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test.csv')
-    parser.add_argument('--data_root', type = str, default = '')
-    parser.add_argument('--opt', type = str, default = 'Adam')
-    parser.add_argument('--lr', type = float, default = 0.001)
-    parser.add_argument('--momentum', type = float, default = 0.9)
-    parser.add_argument('--epoch', type = int, default = 50)
-    parser.add_argument('--batch_size', type = int, default = 64)
-    parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
-    parser.add_argument('--save_pth', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
-
-    return parser.parse_args()
+def conv3x3x3(in_planes, out_planes, stride=1, groups=1, padding=None, dilation=1, kernel_size=3):
+    """3x3x3 convolution with padding"""
+    if padding is None:
+        padding = kernel_size // 2  # padding to keep the image size constant
+    return nn.Conv3d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
+                     padding=padding, groups=groups, bias=False, dilation=dilation)
 
 
+def conv1x1x1(in_planes, out_planes, stride=1):
+    """1x1x1 convolution"""
+    return nn.Conv3d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
-if __name__ == '__main__':
-    args = parse_args()
 
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    
-    base_name = "restnet18_" + timestr + ".pth"
-    name = os.path.join(args.save_pth, base_name)
-    args.save_pth = os.path.abspath(name)
+class BasicBlock(nn.Module):
+    expansion = 1
 
-    base_name_log = "restnet18_" + timestr + ".log"
-    name_log = os.path.join(args.log, base_name_log)
-    args.log = os.path.abspath(name_log)
-    
-    batched_trainset, batched_testset = dataloader.dataloader(args, 'ResNet')
+    def __init__(self, in_planes, planes, stride=1, downsample=None, groups=1,
+                 base_width=64, dilation=1, norm_layer=None):
+        super(BasicBlock, self).__init__()
+        if norm_layer is None:
+            self.norm_layer = nn.BatchNorm3d
+        else:
+            self.norm_layer = norm_layer
+        if groups != 1 or base_width != 64:
+            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+        if dilation > 1:
+            raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
+        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv3x3x3(in_planes, planes, stride)
+        self.bn1 = self.create_norm_layer(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3x3(planes, planes)
+        self.bn2 = self.create_norm_layer(planes)
+        self.downsample = downsample
+        self.stride = stride
 
-    train(args, batched_trainset, batched_testset, 3)
+    def forward(self, x):
+        identity = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+    def create_norm_layer(self, *args, **kwargs):
+        return self.norm_layer(*args, **kwargs)
+
+
+class BasicBlock1D(BasicBlock):
+    def __init__(self, in_channels, channels, stride=1, downsample=None, kernel_size=3, norm_layer=None):
+        super(BasicBlock, self).__init__()
+        if norm_layer is None:
+            self.norm_layer = nn.BatchNorm1d
+        else:
+            self.norm_layer = norm_layer
+        self.conv1 = nn.Conv1d(in_channels=in_channels, out_channels=channels, stride=stride, kernel_size=kernel_size,
+                               bias=False, padding=1)
+        self.bn1 = self.create_norm_layer(channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv1d(in_channels=channels, out_channels=channels, stride=stride, kernel_size=kernel_size,
+                               bias=False, padding=1)
+        self.bn2 = self.create_norm_layer(channels)
+        self.downsample = downsample
+        self.stride = stride
+
+
+class Bottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, in_planes, planes, stride=1, downsample=None, groups=1,
+                 base_width=64, dilation=1, norm_layer=None):
+        super(Bottleneck, self).__init__()
+        if norm_layer is None:
+            self.norm_layer = nn.BatchNorm3d
+        else:
+            self.norm_layer = norm_layer
+        width = int(planes * (base_width / 64.)) * groups
+        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv1x1x1(in_planes, width)
+        self.bn1 = self.create_norm_layer(width)
+        self.conv2 = conv3x3x3(width, width, stride, groups, dilation)
+        self.bn2 = self.create_norm_layer(width)
+        self.conv3 = conv1x1x1(width, planes * self.expansion)
+        self.bn3 = self.create_norm_layer(planes * self.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+    def create_norm_layer(self, *args, **kwargs):
+        return self.norm_layer(*args, **kwargs)
+
+
+class ResNet(nn.Module):
+
+    def __init__(self, block, layers, n_outputs=1000, zero_init_residual=False,
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None,
+                 norm_layer=None, n_features=3):
+        super(ResNet, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm3d
+        self._norm_layer = norm_layer
+
+        self.in_planes = 64
+        self.dilation = 1
+        if replace_stride_with_dilation is None:
+            # each element in the tuple indicates if we should replace
+            # the 2x2x2 stride with a dilated convolution instead
+            replace_stride_with_dilation = [False, False, False]
+        if len(replace_stride_with_dilation) != 3:
+            raise ValueError("replace_stride_with_dilation should be None "
+                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
+        self.groups = groups
+        self.base_width = width_per_group
+        self.conv1 = nn.Conv3d(n_features, self.in_planes, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.bn1 = norm_layer(self.in_planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2,
+                                       dilate=replace_stride_with_dilation[0])
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
+                                       dilate=replace_stride_with_dilation[1])
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
+                                       dilate=replace_stride_with_dilation[2])
+        self.avgpool = nn.AdaptiveAvgPool3d(1)
+        self.fc = nn.Linear(512 * block.expansion, n_outputs)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm3d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+        # Zero-initialize the last BN in each residual branch,
+        # so that the residual branch starts with zeros, and each residual block behaves like an identity.
+        # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
+        if zero_init_residual:
+            for m in self.modules():
+                if isinstance(m, Bottleneck):
+                    nn.init.constant_(m.bn3.weight, 0)
+                elif isinstance(m, BasicBlock):
+                    nn.init.constant_(m.bn2.weight, 0)
+
+    def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
+        norm_layer = self._norm_layer
+        downsample = None
+        previous_dilation = self.dilation
+        if dilate:
+            self.dilation *= stride
+            stride = 1
+        if stride != 1 or self.in_planes != planes * block.expansion:
+            downsample = nn.Sequential(
+                conv1x1x1(self.in_planes, planes * block.expansion, stride),
+                norm_layer(planes * block.expansion),
+            )
+
+        layers = []
+        layers.append(block(self.in_planes, planes, stride, downsample, self.groups,
+                            self.base_width, previous_dilation, norm_layer))
+        self.in_planes = planes * block.expansion
+        for _ in range(1, blocks):
+            layers.append(block(self.in_planes, planes, groups=self.groups,
+                                base_width=self.base_width, dilation=self.dilation,
+                                norm_layer=norm_layer))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = x.reshape(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
+
+
+def _resnet(arch, block, layers, pretrained, progress, **kwargs):
+    model = ResNet(block, layers, **kwargs)
+    return model
+
+
+def resnet_18(pretrained=False, progress=True, **kwargs):
+    """Constructs a ResNet-18 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet_18', BasicBlock, [2, 2, 2, 2], pretrained, progress,
+                   **kwargs)
+
+
+def resnet_34(pretrained=False, progress=True, **kwargs):
+    """Constructs a ResNet-34 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet_34', BasicBlock, [3, 4, 6, 3], pretrained, progress,
+                   **kwargs)
+
+
+def resnet_50(pretrained=False, progress=True, **kwargs):
+    """Constructs a ResNet-50 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet_50', Bottleneck, [3, 4, 6, 3], pretrained, progress,
+                   **kwargs)
+
+
+def resnet_101(pretrained=False, progress=True, **kwargs):
+    """Constructs a ResNet-101 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet_101', Bottleneck, [3, 4, 23, 3], pretrained, progress,
+                   **kwargs)
+
+
+def resnet_152(pretrained=False, progress=True, **kwargs):
+    """Constructs a ResNet-152 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet_152', Bottleneck, [3, 8, 36, 3], pretrained, progress,
+                   **kwargs)
+
+
+def resnext_50_32x4d(pretrained=False, progress=True, **kwargs):
+    """Constructs a ResNeXt-50 32x4d model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    kwargs['groups'] = 32
+    kwargs['width_per_group'] = 4
+    return _resnet('resnext_50_32x4d', Bottleneck, [3, 4, 6, 3],
+                   pretrained, progress, **kwargs)
+
+
+def resnext_101_32x8d(pretrained=False, progress=True, **kwargs):
+    """Constructs a ResNeXt-101 32x8d model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    kwargs['groups'] = 32
+    kwargs['width_per_group'] = 8
+    return _resnet('resnext_101_32x8d', Bottleneck, [3, 4, 23, 3],
+                   pretrained, progress, **kwargs)

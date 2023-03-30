@@ -49,19 +49,42 @@ class OCTDataset(Dataset):
         self.transform = transform
         # self.subset = subset
         self.nb_classes=len(np.unique(list(LABELS_Severity.values())))
-        self.path_list = self.annot['File_Path'].values
+        # self.path_list = self.annot['File_Path'].values
+        self.path_list = self.annot['Volume_ID'].values
         self._labels = self.annot['Severity_Label'].values
         assert len(self.path_list) == len(self._labels)
         # idx_each_class = [[] for i in range(self.nb_classes)]
 
     def __getitem__(self, index):
         # img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
-        img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
+        img_volume = []
 
-        if self.transform is not None:
-            img = self.transform(img)
+        target = self._labels[index]
 
-        return img, target
+        folder_path = self.root + self.path_list[index]
+        
+        # there are 49 frames per volume ID, concatenate them here for 3D CNN
+        for i in range(0, 49): 
+            tif = str(i) + '.tif'
+            png = str(i) + '.png'
+            
+            if (os.path.isfile(os.path.join(folder_path, tif))):
+               img = Image.open(os.path.join(folder_path, tif)).convert("L")
+            else:
+               img = Image.open(os.path.join(folder_path, png)).convert("L")
+            
+            if self.transform is not None:
+                img = self.transform(img)
+
+            img_volume.append(img)
+
+        #img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
+
+        # if self.transform is not None:
+        #     img = self.transform(img)
+
+        img_volume = torch.stack(img_volume, dim=1)
+        return img_volume, target
 
     def __len__(self):
         return len(self._labels)     
