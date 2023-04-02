@@ -18,7 +18,7 @@ cells_per_block = (2, 2)
 visualize = False
 transform_sqrt = True
 
-n_components = 49
+n_components = 20
 
 
 
@@ -165,7 +165,8 @@ def image_feature_extraction(args, data_type):
         img_volume.append(reduced_features)
     
     print(np.shape(img_volume))
-    ret = np.hstack(img_volume)
+    img_volume = np.array(img_volume)
+    ret = img_volume.reshape((len(img_volume), -1))
     print(np.shape(ret))
 
 
@@ -198,12 +199,14 @@ def dataloader(args, model_name):
 
     print(len(trainset))
     print(len(testset))
-    if (args.batch_size != 1):
+    print(args.do_batch)
+    if (args.do_batch == 1):
+        print('a')
         batched_trainset = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
         batched_testset = DataLoader(testset, batch_size=args.batch_size, shuffle=True)
     else:
-        batched_trainset = trainset
-        batched_testset = testset
+        batched_trainset = DataLoader(trainset, batch_size=len(trainset), shuffle=True)
+        batched_testset = DataLoader(testset, batch_size=len(testset), shuffle=True)
 
     return batched_trainset, batched_testset
 

@@ -130,6 +130,9 @@ def parse_args():
     return parser.parse_args()
 
 
+## Take an hour to finish
+## Train Feature Size: (495, 980) Test Feature Size: (163, 980)
+## Accuracy: 0.4049079754601227
 
 if __name__ == '__main__':
     args = parse_args()

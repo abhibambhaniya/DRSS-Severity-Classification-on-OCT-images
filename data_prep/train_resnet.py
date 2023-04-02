@@ -134,9 +134,10 @@ def parse_args():
     parser.add_argument('--lr', type = float, default = 0.001)
     parser.add_argument('--weight_decay', type = float, default = 0.05)
     parser.add_argument('--momentum', type = float, default = 0.9)
-    parser.add_argument('--epoch', type = int, default = 50)
-    parser.add_argument('--batch_size', type = int, default = 64)
-    parser.add_argument('--data_aug', type = bool, default = True)
+    parser.add_argument('--epoch', type = int, default = 20)
+    parser.add_argument('--batch_size', type = int, default = 8)
+    parser.add_argument('--do_batch', type = bool, default = 1)
+    parser.add_argument('--data_aug', type =int, default = 1)
     parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
     parser.add_argument('--save_pth', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
 
@@ -157,6 +158,6 @@ if __name__ == '__main__':
     name_log = os.path.join(args.log, base_name_log)
     args.log = os.path.abspath(name_log)
     
-    batched_trainset, batched_testset = dataloader.dataloader(args, 'ResNetX')
+    batched_trainset, batched_testset = dataloader.dataloader(args, 'ResNet')
     
     train(args, batched_trainset, batched_testset, 3)
