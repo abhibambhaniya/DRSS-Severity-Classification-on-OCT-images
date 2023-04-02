@@ -8,6 +8,19 @@ import argparse
 import os
 import copy
 
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from skimage.feature import hog
+
+orientations = 9
+pixels_per_cell = (8, 8)
+cells_per_block = (2, 2)
+visualize = False
+transform_sqrt = True
+
+n_components = 49
+
+
 
 LABELS_Severity = {35: 0,
                    43: 0,
@@ -35,6 +48,7 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     normalize,
 ])
+
     
 class OCTDataset(Dataset):
     def __init__(self, args, subset='train', transform=None,):
@@ -92,6 +106,86 @@ class OCTDataset(Dataset):
 
     def __len__(self):
         return len(self._labels)     
+
+
+def image_feature_extraction(args, data_type):
+    if data_type == 'train':
+        annot = pd.read_csv(args.annot_train_prime)
+    elif data_type == 'test':
+        annot = pd.read_csv(args.annot_test_prime)
+
+    annot['Severity_Label'] = [LABELS_Severity[drss] for drss in copy.deepcopy(annot['DRSS'].values)]
+    root = os.path.expanduser(args.data_root)
+    nb_classes=len(np.unique(list(LABELS_Severity.values())))
+    path_list = annot['Volume_ID'].values
+
+    labels = annot['Severity_Label'].values
+    print(labels)
+    assert len(path_list) == len(labels)
+
+    # get features
+    # img_volume = np.zeros((len(labels), 49, 224*224), dtype=object)
+    #img_volume.fill([])
+    # features = np.zeros((len(labels), 49))
+    img_volume = []
+    
+    scaler = StandardScaler()
+    for index in range(len(path_list)):
+        # img_volume[index] = []
+        frames = []
+        folder_path = root + path_list[index]
+        
+        # there are maximum 49 frames per volume ID, concatenate them here for 3D CNN
+        # if certain frame did not exsit, simply take a copy of previous frame
+        for i in range(0, 49): 
+            tif = str(i) + '.tif'
+            png = str(i) + '.png'
+            
+            if (os.path.isfile(os.path.join(folder_path, tif))):
+                img = Image.open(os.path.join(folder_path, tif)).convert("L")
+            elif (os.path.isfile(os.path.join(folder_path, png))):
+                img = Image.open(os.path.join(folder_path, png)).convert("L")
+            else:
+                img = frames[i - 1]
+                frames.append(frames[i - 1])
+                continue
+    
+            hog_features = hog(img, orientations=orientations, pixels_per_cell=pixels_per_cell,
+                       cells_per_block=cells_per_block, visualize=visualize, transform_sqrt=transform_sqrt)
+            frames.append(hog_features)
+            # img = svm_transform(img)
+            # img = np.array(img)
+            # img_volume[index][i] = img.flatten()
+
+        features = np.array(frames)
+        normalized_features = scaler.fit_transform(features)
+        pca = PCA(n_components=n_components)
+        reduced_features = pca.fit_transform(normalized_features)
+
+        img_volume.append(reduced_features)
+    
+    print(np.shape(img_volume))
+    ret = np.hstack(img_volume)
+    print(np.shape(ret))
+
+
+    # img_volume = np.array(img_volume)
+    # print(len(labels))
+    # print(np.shape(img_volume))
+
+    return ret, labels
+
+
+def svm_dataloader(args, model_name):
+    # this can also be used for another classification we choose
+    if (model_name != 'SVM'):
+        print("The provided model is not SVM")
+        return
+
+    train_features, train_labels = image_feature_extraction(args, 'train')
+    test_features, test_labels = image_feature_extraction(args, 'test')
+
+    return train_features, train_labels, test_features, test_labels
 
 
 def dataloader(args, model_name):

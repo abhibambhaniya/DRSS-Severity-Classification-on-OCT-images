@@ -2,16 +2,10 @@
 # Get pretrained model from: https://drive.google.com/drive/folders/1xbYbZ7rpyjftI_KCk6YuL-XrfQDz7Yd4
 
 import numpy as np
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import torch.optim as optim
-
-import torchvision
-from torchvision import models, transforms
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score
 
 import dataloader
-import resnet as resnet
 
 import pandas as pd
 from PIL import Image
@@ -19,9 +13,6 @@ import argparse
 import os
 import copy
 import time
-from tqdm import tqdm
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def train(args, batched_trainset, batched_testset, num_class):
 
@@ -42,9 +33,9 @@ def train(args, batched_trainset, batched_testset, num_class):
     rnet18.fc = nn.Sequential(
         nn.Linear(512, 256),
         nn.ReLU(),
-        nn.Dropout(p=0.1),
+        nn.Dropout(p=0.5),
         nn.Linear(256, num_class),
-        #nn.Softmax(dim=1)
+        nn.Softmax(dim=1)
     )
 
     # k = rnet18.fc.in_features
@@ -130,15 +121,11 @@ def parse_args():
     parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv')
     parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv')
     parser.add_argument('--data_root', type = str, default = '')
-    parser.add_argument('--opt', type = str, default = 'AdamW')
     parser.add_argument('--lr', type = float, default = 0.001)
-    parser.add_argument('--weight_decay', type = float, default = 0.05)
-    parser.add_argument('--momentum', type = float, default = 0.9)
     parser.add_argument('--epoch', type = int, default = 50)
     parser.add_argument('--batch_size', type = int, default = 64)
-    parser.add_argument('--data_aug', type = bool, default = True)
-    parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
-    parser.add_argument('--save_pth', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
+    parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/SVM')
+    parser.add_argument('--save_pickle', type = str, default = '/usr/scratch/yangyu/FML_Model/SVM')
 
     return parser.parse_args()
 
@@ -149,14 +136,24 @@ if __name__ == '__main__':
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
     
-    base_name = "restnet18_" + timestr + ".pth"
-    name = os.path.join(args.save_pth, base_name)
-    args.save_pth = os.path.abspath(name)
+    base_name = "svm_" + timestr + ".pickle"
+    name = os.path.join(args.save_pickle, base_name)
+    args.save_pickle = os.path.abspath(name)
 
-    base_name_log = "restnet18_" + timestr + ".log"
+    base_name_log = "svm_" + timestr + ".log"
     name_log = os.path.join(args.log, base_name_log)
     args.log = os.path.abspath(name_log)
     
-    batched_trainset, batched_testset = dataloader.dataloader(args, 'ResNetX')
-    
-    train(args, batched_trainset, batched_testset, 3)
+    train_features, train_labels, test_features, test_labels = dataloader.svm_dataloader(args, 'SVM')
+
+    print("Train Feature Size:", np.shape(train_features), "Test Feature Size:", np.shape(test_features))
+
+    svm = SVC(kernel='linear')
+    svm.fit(train_features, train_labels)
+
+    # Predict the labels of the testing set using the SVM
+    test_predictions = svm.predict(test_features)
+
+    # Evaluate the performance of the SVM using metrics such as accuracy, precision, recall, or F1 score
+    accuracy = accuracy_score(test_labels, test_predictions)
+    print('Accuracy:', accuracy)
