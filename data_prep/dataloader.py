@@ -66,6 +66,7 @@ class OCTDataset(Dataset):
         # self.path_list = self.annot['File_Path'].values
         self.path_list = self.annot['Volume_ID'].values
         self._labels = self.annot['Severity_Label'].values
+        self._metadata = self.annot[['BCVA', 'CST', 'Patient_ID',  'Leakage_Index', 'Age']].values.astype(np.float32)
         assert len(self.path_list) == len(self._labels)
         # idx_each_class = [[] for i in range(self.nb_classes)]
 
@@ -74,7 +75,7 @@ class OCTDataset(Dataset):
         img_volume = []
 
         target = self._labels[index]
-
+        metadata = self._metadata[index]
         folder_path = self.root + self.path_list[index]
         
         # there are maximum 49 frames per volume ID, concatenate them here for 3D CNN
@@ -102,7 +103,7 @@ class OCTDataset(Dataset):
         #     img = self.transform(img)
 
         img_volume = torch.stack(img_volume, dim=1)
-        return img_volume, target
+        return img_volume, target , metadata
 
     def __len__(self):
         return len(self._labels)     
