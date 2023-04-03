@@ -61,12 +61,14 @@ class OCTDataset(Dataset):
         # print(self.annot)
         self.root = os.path.expanduser(args.data_root)
         self.transform = transform
-        # self.subset = subset
+        self.subset = subset
         self.nb_classes=len(np.unique(list(LABELS_Severity.values())))
         # self.path_list = self.annot['File_Path'].values
         self.path_list = self.annot['Volume_ID'].values
         self._labels = self.annot['Severity_Label'].values
-        self._metadata = self.annot[['BCVA', 'CST', 'Patient_ID',  'Leakage_Index', 'Age']].values.astype(np.float32)
+        self.label_freq = [(list(self._labels)).count(0), (list(self._labels)).count(1), (list(self._labels)).count(2)]
+        print(self.label_freq)
+        self._metadata = self.annot[['Gender', 'Race', 'Diabetes_Type', 'Diabetes_Years', 'BMI', 'BCVA', 'CST', 'Leakage_Index', 'Age']].values.astype(np.float32)
         assert len(self.path_list) == len(self._labels)
         # idx_each_class = [[] for i in range(self.nb_classes)]
 
@@ -89,8 +91,11 @@ class OCTDataset(Dataset):
             elif (os.path.isfile(os.path.join(folder_path, png))):
                img = Image.open(os.path.join(folder_path, png)).convert("L")
             else:
-                img_volume.append(img_volume[i - 1])
-                continue
+                if (self.subset == 'train'): 
+                    img_volume.append(img_volume[i - 1])
+                    continue
+                else:
+                    print('ERROR: Test Data missing frames')
 
             if self.transform is not None:
                 img = self.transform(img)
@@ -202,14 +207,13 @@ def dataloader(args, model_name):
     print(len(testset))
     print(args.do_batch)
     if (args.do_batch == 1):
-        print('a')
         batched_trainset = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
         batched_testset = DataLoader(testset, batch_size=args.batch_size, shuffle=True)
     else:
         batched_trainset = DataLoader(trainset, batch_size=len(trainset), shuffle=True)
         batched_testset = DataLoader(testset, batch_size=len(testset), shuffle=True)
 
-    return batched_trainset, batched_testset
+    return batched_trainset, batched_testset, trainset.label_freq, testset.label_freq
 
 # def parse_args():
 #     parser = argparse.ArgumentParser()
