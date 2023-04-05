@@ -43,11 +43,21 @@ transform_resnet = transforms.Compose([
     normalize,
 ])
 
+transform_augment = transforms.Compose([
+    transforms.Resize(size=(224,224)),
+    transforms.Grayscale(num_output_channels=3),
+    transforms.RandomRotation(degrees=(-15, 15)),
+    transforms.GaussianBlur(kernel_size=(5, 5)),
+    transforms.ToTensor(),
+    normalize,
+])
+
 transform = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.ToTensor(),
     normalize,
 ])
+
 
     
 class OCTDataset(Dataset):
@@ -57,24 +67,43 @@ class OCTDataset(Dataset):
         elif subset == 'test':
             self.annot = pd.read_csv(args.annot_test_prime)
             
-        self.annot['Severity_Label'] = [LABELS_Severity[drss] for drss in copy.deepcopy(self.annot['DRSS'].values)] 
+        # self.annot['Severity_Label']
+        temp = [LABELS_Severity[drss] for drss in copy.deepcopy(self.annot['DRSS'].values)] 
+        #self.annot['Severity_Label'] = temp + temp
+        if (subset == 'train' and args.data_aug == 1):
+            self.annot_labels = temp + temp
+        else:
+            self.annot_labels = temp
         # print(self.annot)
         self.root = os.path.expanduser(args.data_root)
         self.transform = transform
+        self.transform_aug = transform_augment
         self.subset = subset
         self.nb_classes=len(np.unique(list(LABELS_Severity.values())))
         # self.path_list = self.annot['File_Path'].values
         self.path_list = self.annot['Volume_ID'].values
-        self._labels = self.annot['Severity_Label'].values
+        self._labels = self.annot_labels
+        # print(self._labels)
         self.label_freq = [(list(self._labels)).count(0), (list(self._labels)).count(1), (list(self._labels)).count(2)]
-        print(self.label_freq)
-        self._metadata = self.annot[['Gender', 'Race', 'Diabetes_Type', 'Diabetes_Years', 'BMI', 'BCVA', 'CST', 'Leakage_Index', 'Age']].values.astype(np.float32)
-        assert len(self.path_list) == len(self._labels)
+        # print(self.label_freq)
+        #self._metadata 
+        temp_meta = self.annot[['Gender', 'Race', 'Diabetes_Type', 'Diabetes_Years', 'BMI', 'BCVA', 'CST', 'Leakage_Index', 'Age']].values.astype(np.float32)
+        
+        # if (subset == 'train'):
+        #     self._metadata = temp_meta + temp_meta
+        # else:
+        self._metadata = temp_meta
+        #assert len(self.path_list) == len(self._labels)
         # idx_each_class = [[] for i in range(self.nb_classes)]
 
     def __getitem__(self, index):
         # img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
         img_volume = []
+
+        data_aug = False
+        if (self.subset == 'train' and index >= len(self.path_list)):
+            index = index % len(self.path_list)
+            data_aug = True
 
         target = self._labels[index]
         metadata = self._metadata[index]
@@ -97,8 +126,11 @@ class OCTDataset(Dataset):
                 else:
                     print('ERROR: Test Data missing frames')
 
-            if self.transform is not None:
+            if self.transform is not None and not data_aug:
                 img = self.transform(img)
+
+            if self.transform_aug is not None and data_aug and self.subset == 'train':
+                img = self.transform_aug(img)
 
             img_volume.append(img)
 
@@ -108,7 +140,7 @@ class OCTDataset(Dataset):
         #     img = self.transform(img)
 
         img_volume = torch.stack(img_volume, dim=1)
-        return img_volume, target , metadata
+        return img_volume, target, metadata
 
     def __len__(self):
         return len(self._labels)     

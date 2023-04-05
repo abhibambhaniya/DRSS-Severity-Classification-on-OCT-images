@@ -25,40 +25,40 @@ from tqdm import tqdm
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-# resnet = resnet.resnet_18()
-# num_features = resnet.fc.in_features
-# resnet.fc = nn.Identity()  # remove last fully connected layer
+resnet = resnet.resnet_18()
+num_features = resnet.fc.in_features
+resnet.fc = nn.Identity()  # remove last fully connected layer
 
-# # Define MLP for metadata
-# metadata_mlp = nn.Sequential(
-#     nn.Linear(9, 128),
-#     nn.ReLU(inplace=True),
-#     nn.Linear(128, 64),
-#     nn.ReLU(inplace=True),
-# )
+# Define MLP for metadata
+metadata_mlp = nn.Sequential(
+    nn.Linear(9, 128),
+    nn.ReLU(inplace=True),
+    nn.Linear(128, 64),
+    nn.ReLU(inplace=True),
+)
 
-# # Define final MLP layers
-# final_mlp = nn.Sequential(
-#     nn.Linear(num_features + 64, 32),
-#     nn.ReLU(inplace=True),
-#     nn.Linear(32, 3),
-#     nn.Softmax(dim=1)
-# )
+# Define final MLP layers
+final_mlp = nn.Sequential(
+    nn.Linear(num_features + 64, 32),
+    nn.ReLU(inplace=True),
+    nn.Linear(32, 3),
+    nn.Softmax(dim=1)
+)
 
-# # Define model that combines ResNet and MLP
-# class ImageMetadataModel(nn.Module):
-#     def __init__(self):
-#         super(ImageMetadataModel, self).__init__()
-#         self.resnet = resnet
-#         self.metadata_mlp = metadata_mlp
-#         self.final_mlp = final_mlp
+# Define model that combines ResNet and MLP
+class ImageMetadataModel(nn.Module):
+    def __init__(self):
+        super(ImageMetadataModel, self).__init__()
+        self.resnet = resnet
+        self.metadata_mlp = metadata_mlp
+        self.final_mlp = final_mlp
         
-#     def forward(self, image_data, metadata):
-#         image_features = self.resnet(image_data)
-#         metadata_features = self.metadata_mlp(metadata)
-#         combined_features = torch.cat([image_features, metadata_features], dim=1)
-#         output = self.final_mlp(combined_features)
-#         return output
+    def forward(self, image_data, metadata):
+        image_features = self.resnet(image_data)
+        metadata_features = self.metadata_mlp(metadata)
+        combined_features = torch.cat([image_features, metadata_features], dim=1)
+        output = self.final_mlp(combined_features)
+        return output
 
 
 
@@ -70,29 +70,29 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
     logfile.write('\n')
 
     # #rnet18 = models.resnet18(weights='DEFAULT')
-    rnet18 = resnet.resnet_18() # untrained model taken from open-source github repo
-    #print(rnet18)
+    # rnet18 = resnet.resnet_18(n_features=3) # untrained model taken from open-source github repo
+    # #print(rnet18)
 
 
-    # for param in rnet18.parameters():
-    #     param.requires_grad = False
+    # # for param in rnet18.parameters():
+    # #     param.requires_grad = False
 
-    # Replace the fully connected layers with new layers that include L2 regularization
-    rnet18.fc = nn.Sequential(
-        nn.Linear(512, 256),
-        nn.ReLU(),
-        nn.Dropout(p=0.3),
-        nn.Linear(256, num_class),
-        #nn.Softmax(dim=1)
-    )
+    # # Replace the fully connected layers with new layers that include L2 regularization
+    # rnet18.fc = nn.Sequential(
+    #     nn.Linear(512, 256),
+    #     nn.ReLU(),
+    #     nn.Dropout(p=0.3),
+    #     nn.Linear(256, num_class),
+    #     #nn.Softmax(dim=1)
+    # )
 
-    # k = rnet18.fc.in_features
-    # rnet18.fc = nn.Linear(k, num_class)
-    # print(rnet18)
-    rnet18 = rnet18.to(device)
-
-    # rnet18 = ImageMetadataModel()
+    # # k = rnet18.fc.in_features
+    # # rnet18.fc = nn.Linear(k, num_class)
+    # # print(rnet18)
     # rnet18 = rnet18.to(device)
+
+    rnet18 = ImageMetadataModel()
+    rnet18 = rnet18.to(device)
     
     weight = weight.to(device)
     loss_fn = nn.CrossEntropyLoss(weight=weight) # loss function
@@ -120,15 +120,15 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
             train_data = train_data.to(device)
             train_label = train_label.to(device)
 
-            # has_nan = torch.isnan(metadata)
-            # any_nan = torch.any(has_nan)
-            # if (any_nan):
-            #     metadata = torch.zeros(metadata.shape, device= device)
-            # else:
-            #     metadata = metadata.to(device)
+            has_nan = torch.isnan(metadata)
+            any_nan = torch.any(has_nan)
+            if (any_nan):
+                metadata = torch.zeros(metadata.shape, device= device)
+            else:
+                metadata = metadata.to(device)
 
-            # out = rnet18(train_data, metadata)
-            out = rnet18(train_data)
+            out = rnet18(train_data, metadata)
+            # out = rnet18(train_data)
             loss = loss_fn(out, train_label)
             optimizer.zero_grad()
             loss.backward()
@@ -161,17 +161,17 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
             for test_data, test_label, _ in batched_testset:
                 test_data = test_data.to(device)
                 test_label = test_label.to(device)
-                # metadata = torch.zeros(_.shape, device= device)
+                metadata = torch.zeros(_.shape, device= device)
 
-                out = rnet18(test_data)
-                # out = rnet18(test_data, metadata)
+                # out = rnet18(test_data)
+                out = rnet18(test_data, metadata)
 
                 _, prediction = torch.max(out, 1)
                 loss = loss_fn(out, test_label)
                 test_loss += loss.item()
-                print(test_label)
-                print(prediction)
-                print('\n')
+                # print(test_label)
+                # print(prediction)
+                # print('\n')
                 test_correct_num += (prediction == test_label).sum().item()
                 test_total_num += test_label.size(0)
 
@@ -231,10 +231,14 @@ if __name__ == '__main__':
 
     batched_trainset, batched_testset, train_freq, test_freq = dataloader.dataloader(args, 'ResNet')
 
+    print(train_freq)
+    print(test_freq)
     freq = np.array(train_freq) + np.array(test_freq)
     print(freq)
     # weight = freq / np.sum(freq)
-    weight = torch.tensor(1 / freq, dtype=torch.float)
+    weight = [sum(freq) / (3 * count) for count in freq]
+
+    weight = torch.tensor(weight, dtype=torch.float)
     print(weight)
 
     train(args, batched_trainset, batched_testset, weight, 3)
