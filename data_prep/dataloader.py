@@ -18,7 +18,7 @@ cells_per_block = (2, 2)
 visualize = False
 transform_sqrt = True
 
-n_components = 20
+n_components = 49
 
 
 
@@ -39,6 +39,7 @@ normalize = transforms.Normalize(mean=mean, std=std)
 transform_resnet = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.Grayscale(num_output_channels=3), # to compatible with resnet
+    # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
 ])
@@ -46,14 +47,26 @@ transform_resnet = transforms.Compose([
 transform_augment = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.Grayscale(num_output_channels=3),
-    transforms.RandomRotation(degrees=(-15, 15)),
-    transforms.GaussianBlur(kernel_size=(5, 5)),
+    transforms.RandomRotation(degrees=(15, 15)),
+    #transforms.GaussianBlur(kernel_size=(5, 5)),
+    transforms.ColorJitter(contrast=(0.5, 0.5)),
+    transforms.ToTensor(),
+    normalize,
+])
+
+transform_augment2 = transforms.Compose([
+    transforms.Resize(size=(224,224)),
+    transforms.Grayscale(num_output_channels=3),
+    transforms.RandomRotation(degrees=(-15, -15)),
+    #transforms.GaussianBlur(kernel_size=(5, 5)),
+    transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
 ])
 
 transform = transforms.Compose([
     transforms.Resize(size=(224,224)),
+    # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
 ])
@@ -71,7 +84,7 @@ class OCTDataset(Dataset):
         temp = [LABELS_Severity[drss] for drss in copy.deepcopy(self.annot['DRSS'].values)] 
         #self.annot['Severity_Label'] = temp + temp
         if (subset == 'train' and args.data_aug == 1):
-            self.annot_labels = temp + temp
+            self.annot_labels = temp + temp + temp
         else:
             self.annot_labels = temp
         # print(self.annot)
