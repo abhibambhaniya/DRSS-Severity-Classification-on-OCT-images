@@ -13,6 +13,7 @@ import argparse
 import os
 import copy
 import time
+import pickle
 
 
 def parse_args():
@@ -40,14 +41,26 @@ if __name__ == '__main__':
     
     base_name = "svm_" + timestr + ".pickle"
     name = os.path.join(args.save_pickle, base_name)
+
+    feature_base_name = "svm_feature_" + timestr + ".pickle"
+    save_feature = os.path.abspath(os.path.join(args.save_pickle, feature_base_name))
+
     args.save_pickle = os.path.abspath(name)
 
+    print(args.save_pickle)
+    print(save_feature)
+    
     base_name_log = "svm_" + timestr + ".log"
     name_log = os.path.join(args.log, base_name_log)
     args.log = os.path.abspath(name_log)
     
     start_time = time.time()
     train_features, train_labels, test_features, test_labels = dataloader.svm_dataloader(args, 'SVM')
+
+    dict = {"train_features": train_features, "train_labels": train_labels, "test_features": test_features, "test_labels" : test_labels}
+    with open(save_feature,'wb') as f:
+        pickle.dump(dict, f)
+
 
     logfile = open(args.log, "w")
     msg = f'Train Feature Size: {np.shape(train_features)}, Test Feature Size: {np.shape(test_features)} \n'
@@ -71,3 +84,11 @@ if __name__ == '__main__':
     print(accuracy_msg)
 
     logfile.close()
+
+    with open(args.save_pickle,'wb') as f:
+        pickle.dump(svm, f)
+
+
+    # with open('model.pkl', 'rb') as f:
+    #     clf2 = pickle.load(f)
+    #     clf2.predict(test_features)

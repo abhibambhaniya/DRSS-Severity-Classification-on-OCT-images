@@ -91,6 +91,7 @@ class OCTDataset(Dataset):
         self.root = os.path.expanduser(args.data_root)
         self.transform = transform
         self.transform_aug = transform_augment
+        self.transform_aug2 = transform_augment2
         self.subset = subset
         self.nb_classes=len(np.unique(list(LABELS_Severity.values())))
         # self.path_list = self.annot['File_Path'].values
@@ -113,10 +114,10 @@ class OCTDataset(Dataset):
         # img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
         img_volume = []
 
-        data_aug = False
+        data_aug = 0
         if (self.subset == 'train' and index >= len(self.path_list)):
+            data_aug = int(index / len(self.path_list))
             index = index % len(self.path_list)
-            data_aug = True
 
         target = self._labels[index]
         metadata = self._metadata[index]
@@ -139,11 +140,12 @@ class OCTDataset(Dataset):
                 else:
                     print('ERROR: Test Data missing frames')
 
-            if self.transform is not None and not data_aug:
+            if self.transform is not None and data_aug == 0:
                 img = self.transform(img)
-
-            if self.transform_aug is not None and data_aug and self.subset == 'train':
+            elif self.transform_aug is not None and data_aug == 1 and self.subset == 'train':
                 img = self.transform_aug(img)
+            elif self.transform_aug2 is not None and data_aug == 2 and self.subset == 'train':
+                img = self.transform_aug2(img)
 
             img_volume.append(img)
 

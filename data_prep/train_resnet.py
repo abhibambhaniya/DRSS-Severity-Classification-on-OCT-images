@@ -39,7 +39,7 @@ class ImageMetadataModel(nn.Module):
             self.resnet.fc = nn.Sequential(
                 nn.Linear(512, 256),
                 nn.ReLU(),
-                nn.Dropout(p=0.3),
+                nn.Dropout(p=0.2),
                 nn.Linear(256, num_class),
                 #nn.Softmax(dim=1)
             )
@@ -61,7 +61,7 @@ class ImageMetadataModel(nn.Module):
             self.final_mlp = nn.Sequential(
                 nn.Linear(num_features + 64, 256),
                 nn.ReLU(inplace=True),
-                nn.Dropout(p=0.3),
+                nn.Dropout(p=0.2),
                 nn.Linear(256, 3),
                 nn.Softmax(dim=1)
             )
