@@ -22,6 +22,8 @@ import os
 import copy
 import time
 from tqdm import tqdm
+import pickle
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -61,7 +63,7 @@ class ImageMetadataModel(nn.Module):
             self.final_mlp = nn.Sequential(
                 nn.Linear(num_features + 64, 256),
                 nn.ReLU(inplace=True),
-                nn.Dropout(p=0.2),
+                nn.Dropout(p=0.3), # lr 0.0001 seems will overfitting after epoch 10
                 nn.Linear(256, 3),
                 nn.Softmax(dim=1)
             )
@@ -136,7 +138,10 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
     elif (args.opt == 'SGD'):
         optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     
-
+    best_balanced_accuracy = 0.0
+    best_epoch_msg = None
+    best_model = None
+    best_pred = {}
     start = time.time()
     for epoch in range(args.epoch):
         logfile = open(args.log, "a")
@@ -216,16 +221,33 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
 
             test_loss = test_loss / len(batched_testset)
             test_accuracy = test_correct_num / test_total_num
-            train_balanced_accuracy = balanced_accuracy_score(test_balanced_true, test_balanced_predict)
+            test_balanced_accuracy = balanced_accuracy_score(test_balanced_true, test_balanced_predict)
 
-            test_msg = f'Epoch: {epoch + 1}/{args.epoch} Test Loss: {test_loss}, Accuracy: {test_accuracy}, Balanced Accuracy: {train_balanced_accuracy}, time spent: {time.time() - start} s \n'
+
+            test_msg = f'Epoch: {epoch + 1}/{args.epoch} Test Loss: {test_loss}, Accuracy: {test_accuracy}, Balanced Accuracy: {test_balanced_accuracy}, time spent: {time.time() - start} s \n'
             print(test_msg)
             logfile.write(test_msg)
+            
+            if (best_balanced_accuracy < test_balanced_accuracy):
+                best_balanced_accuracy = test_balanced_accuracy
+                best_epoch_msg = test_msg
+                best_model = model.state_dict()
+                best_pred['label'] = test_balanced_true
+                best_pred['prediction'] = test_balanced_predict
+
+
         logfile.close()
 
-    torch.save(model.state_dict(), args.save_pth)
+    logfile = open(args.log, "a")
+    logfile.write('Saving the model with the best test balanced accuracy....')
+    logfile.write(best_epoch_msg)
     logfile.close()
-
+    
+    torch.save(best_model.state_dict(), args.save_pth)
+    
+    with open(args.save_pred,'wb') as f:
+        pickle.dump(best_pred, f)
+    
 
 
 def parse_args():
@@ -246,6 +268,7 @@ def parse_args():
     parser.add_argument('--data_aug', type =int, default = 1)
     parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
     parser.add_argument('--save_pth', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
+    parser.add_argument('--save_pred', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
 
     return parser.parse_args()
 
@@ -256,9 +279,13 @@ if __name__ == '__main__':
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
     
-    base_name = "restnet18_" + timestr + ".pth"
+    base_name = "restnet18_" + timestr + ".pt"
     name = os.path.join(args.save_pth, base_name)
     args.save_pth = os.path.abspath(name)
+
+    label_base_name = "restnet18_predictlabel_" + timestr + ".pickle"
+    save_label = os.path.abspath(os.path.join(args.save_pred, label_base_name))
+    args.save_pred = os.path.abspath(name)
 
     base_name_log = "restnet18_" + timestr + ".log"
     name_log = os.path.join(args.log, base_name_log)

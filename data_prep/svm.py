@@ -4,6 +4,8 @@
 import numpy as np
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
+from sklearn.metrics import balanced_accuracy_score
+
 
 import dataloader
 
@@ -76,8 +78,10 @@ if __name__ == '__main__':
 
     # Evaluate the performance of the SVM using metrics such as accuracy, precision, recall, or F1 score
     accuracy = accuracy_score(test_labels, test_predictions)
+    balanced_accuracy = balanced_accuracy_score(test_labels, test_predictions)
 
-    accuracy_msg = f'Fit and Predition time: {time.time() - start_time}, Accuracy: {accuracy}'
+    accuracy_msg = f'Fit and Predition time: {time.time() - start_time}, Accuracy: {accuracy}, Balanced Accuracy: {balanced_accuracy}'
+    
     logfile.write(accuracy_msg)
     logfile.write('\n')
 
