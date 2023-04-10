@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 import numpy as np
+import sklearn 
 
 import torchvision.models 
 from torch.utils.tensorboard import SummaryWriter
@@ -19,25 +20,26 @@ class ImageMetadataClassifier(nn.Module):
     def __init__(self):
         super(ImageMetadataClassifier, self).__init__()
 #         vit_model = torchvision.models.vit_b_16(,dropout=0.2)
-#         vit_model = torchvision.models.VisionTransformer(
-#                 image_size = 224,
-#                 patch_size=16,
-#                 num_layers=4,
-#                 num_heads=8,
-#                 hidden_dim=512,
-#                 mlp_dim=2048,
-#                 dropout=0.2,
-#                 num_classes = 32)
-#         vit_model.conv_proj = nn.Conv2d(49 , 512 , kernel_size=(16,16), stride=(16,16))
+        vit_model = torchvision.models.VisionTransformer(
+                image_size = 224,
+                patch_size=16,
+                num_layers=4,
+                num_heads=8,
+                hidden_dim=512,
+                mlp_dim=2048,
+                dropout=0.2,
+                num_classes = 32)
+        vit_model.conv_proj = nn.Conv2d(49 , 512 , kernel_size=(16,16), stride=(16,16))
 #         vit_model.encoder.layers = nn.Sequential( *list(vit_model.encoder.layers.children()))      ## Have only 2 Encoders
 #         vit_model.heads.head = nn.Linear(in_features=256, out_features=32, bias=True)
-        
-        mnasnet = torchvision.models.mnasnet1_0(num_classes = 32)
-        self.image_features = nn.Sequential( nn.Conv2d(49 , 3 , kernel_size=(1,1), stride=(1,1)),
-                mnasnet
-        )
+
+        self.image_features = vit_model
+#         mnasnet = torchvision.models.mnasnet1_0(num_classes = 32)
+#         self.image_features = nn.Sequential( nn.Conv2d(49 , 3 , kernel_size=(1,1), stride=(1,1)),
+#                 mnasnet
+#         )
         self.metadata_fc = nn.Sequential(
-                nn.Linear(5, 8),
+                nn.Linear(9, 8),
                 nn.ReLU(),
                 # Add more layers as needed
                 )
@@ -55,45 +57,9 @@ class ImageMetadataClassifier(nn.Module):
 
 def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
     # Define model
-#     if( args.model.lower() == "maxvit"):
-#         model = torchvision.models.maxvit_t()
-#         model.classifier = nn.Sequential( nn.AdaptiveAvgPool2d(output_size=1),
-#                                       nn.Flatten(start_dim=1, end_dim=-1),
-#                                       nn.LayerNorm((512,), eps=1e-05, elementwise_affine=True),
-#                                       nn.Linear(in_features=512, out_features=512, bias=True),
-#                                       nn.Tanh(),
-#                                       nn.Linear(in_features=512, out_features=num_class, bias=False))
-# 
-#     elif( args.model.lower() == "alexnet"): 
-#         model = torchvision.models.alexnet()
-#         model.classifier = nn.Sequential ( 
-#                     nn.Dropout(p=0.5, inplace=False),
-#                     nn.Linear(in_features=9216, out_features=4096, bias=True),
-#                     nn.ReLU(inplace=True),
-#                     nn.Dropout(p=0.5, inplace=False),
-#                     nn.Linear(in_features=4096, out_features=4096, bias=True),
-#                     nn.ReLU(inplace=True),
-#                     nn.Linear(in_features=4096, out_features=num_class, bias=True),
-#                     )
-#     elif( args.model.lower()  == "vit"):
-#         vit_model = torchvision.models.vit_b_16(dropout=0.5)
-# #         model.conv_proj = nn.Conv2d(49, 768, kernel_size=(16, 16), stride=(16, 16))
-#         vit_model.encoder.layers = nn.Sequential( *list(vit_model.encoder.layers.children())[0:2])      ## Have only 2 Encoders
-#         vit_model.heads.head = nn.Linear(in_features=768, out_features=num_class, bias=True)
-# #         model = nn.Sequential( nn.Conv2d(49 , 768 , kernel_size=(16,16), stride=(16,16) ))
-#         vit_model.conv_proj = nn.Conv2d(49 , 768 , kernel_size=(16,16), stride=(16,16))
-#         model = vit_model
-#     else:
-#         model = torchvision.models.resnet18()
     model = ImageMetadataClassifier()
     print(model)
 
-#     print(summary(model, [1,49,224,224],[1,6]))
-#     child_counter = 0
-#     for child in model.encoder.layers.children():
-#         print(" child", child_counter, "is -")
-#         print(child)
-#         child_counter += 1
     if( args.load_checkpoint is not None):
         try:
             print("Trying to Load Checkpoint")
@@ -126,20 +92,21 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
 
     ## Updating the classifier from imagenet 1k classification into num_class classification
     model = model.to(device)
-
-#     metadata = torch.zeros((8,6)).to(device)
-#     image = torch.zeros((8,49,224,224)).to(device)
-#     out = model(image,metadata)
-#     print(out)
     # Train model
     num_epochs = args.epoch
     start = time.time()
+
+    best_test_accuracy = 0 
+    best_test_balanced_accuracy = 0 
     for epoch in range(num_epochs):
         running_loss = 0.0
         correct_predictions = 0.0
         total_predictions = 0.0
         start_time = time.time()
         model.train()
+        labels_all =  [ ]
+        predicted_all = [ ]
+
         # Train 1 epoch
         for images, labels, metadata in tqdm(batched_trainset, desc=f"Epoch {epoch+1}/{num_epochs}"):
             # Move data and labels to device
@@ -173,16 +140,28 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
             _, predicted = torch.max(outputs.data, 1)
             total_predictions += labels.size(0)
             correct_predictions += (predicted == labels).sum().item()
-   
+            labels_all.append(labels)
+            predicted_all.append(predicted)
+#             print(labels_all,predicted_all)
+
+#         print(np.shape(labels_all),np.shape(predicted_all))
+        labels_all =  torch.cat(labels_all, dim=0).cpu()
+        predicted_all =  torch.cat(predicted_all, dim=0).cpu()
+#         print(labels_all,predicted_all)
+        print("Train Balanced accuracy: ", sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)) 
+        
+        
         if(args.lr_scheduler):
             lr_scheduler.step()
 
-        if epoch % 3 == 0:
+        if epoch % 1 == 0:          ## Test every epoch, can change according to requirements
             # Evaluate model on test data
             test_loss = 0.0
             test_correct_predictions = 0.0
             test_total_predictions = 0.0
     
+            labels_all =  [ ]
+            predicted_all = [ ]
             model.eval()
             with torch.no_grad():
                 for images, labels, _ in batched_testset:
@@ -200,7 +179,15 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
                     _, predicted = torch.max(outputs.data, 1)
                     test_total_predictions += labels.size(0)
                     test_correct_predictions += (predicted == labels).sum().item()
-#                     print(" predicted :", predicted)
+                    labels_all.append(labels)
+                    predicted_all.append(predicted)
+#             print(labels_all,predicted_all)
+
+                labels_all =  torch.cat(labels_all, dim=0).cpu()
+                predicted_all =  torch.cat(predicted_all, dim=0).cpu()
+                test_balanced_accuracy = sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)
+                print(" Test Balanced accuracy: ", test_balanced_accuracy) 
+ #                     print(" predicted :", predicted)
 #                     print(" labels :", labels)
             test_loss /= len(batched_testset)
             test_accuracy = test_correct_predictions / test_total_predictions
@@ -208,8 +195,11 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
 
         # Print statistics and add to Tensorboard
         end_time = time.time()
-        if epoch % 10 == 0:
-            torch.save(model.state_dict(), args.save_pth + "epoch" + str(epoch) + ".pt")
+        if best_test_accuracy < test_accuracy:
+            torch.save(model.state_dict(), args.save_pth + "_test_accuracy_" + str(test_accuracy) + ".pt")
+        if best_test_balanced_accuracy < test_balanced_accuracy:
+            torch.save(model.state_dict(), args.save_pth + "_test_balanced_accuracy_" + str(test_balanced_accuracy) + ".pt")
+
         epoch_time = end_time - start_time
         train_loss = running_loss / len(batched_trainset)
         train_accuracy = correct_predictions / total_predictions
@@ -226,8 +216,9 @@ def parse_args():
     parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv')
     parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv')
     parser.add_argument('--data_root', type = str, default = '/usr/scratch/abhimanyu/courses/ECE8803_FML/OLIVES')
-    parser.add_argument('--lr', type = float, default = 3e-3)
-    parser.add_argument('--weight_decay', type = float, default = 0.05)
+    parser.add_argument('--data_aug', type =int, default = 1)
+    parser.add_argument('--lr', type = float, default = 5e-4)
+    parser.add_argument('--weight_decay', type = float, default = 0.1)
     parser.add_argument('--momentum', type = float, default = 0.9)
     parser.add_argument('--epoch', type = int, default = 50)
     parser.add_argument('--batch_size', type = int, default = 8)
@@ -238,6 +229,7 @@ def parse_args():
     # Mixed precision training parameters
     parser.add_argument("--amp", action="store_true", help="Use torch.cuda.amp for mixed precision training")
     parser.add_argument("--lr_scheduler", type=bool, default = False, help="Wethear to turn of LR scheduling or not ") 
+    parser.add_argument("--do_batch", type=int, default = 1, help="Wethear to do batching ") 
     
     return parser.parse_known_args()
 
@@ -256,7 +248,7 @@ if __name__ == '__main__':
     args.save_pth = os.path.abspath(name)
 
     # # Define dataloader
-    batched_trainset, batched_testset = dataloader.dataloader(args , args.model) 
+    batched_trainset, batched_testset, train_freq, test_freq = dataloader.dataloader(args , args.model) 
     print("Len of Train:",len(batched_trainset)," , Len of Test dataset:",len(batched_testset))
     train_dnn(args, device, batched_trainset, batched_testset, 3)
 

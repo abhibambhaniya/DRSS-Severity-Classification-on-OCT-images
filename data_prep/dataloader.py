@@ -38,7 +38,6 @@ normalize = transforms.Normalize(mean=mean, std=std)
 
 transform_resnet = transforms.Compose([
     transforms.Resize(size=(224,224)),
-    transforms.Grayscale(num_output_channels=3), # to compatible with resnet
     # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
@@ -46,7 +45,6 @@ transform_resnet = transforms.Compose([
 
 transform_augment = transforms.Compose([
     transforms.Resize(size=(224,224)),
-    transforms.Grayscale(num_output_channels=3),
     transforms.RandomRotation(degrees=(15, 15)),
     #transforms.GaussianBlur(kernel_size=(5, 5)),
     transforms.ColorJitter(contrast=(0.5, 0.5)),
@@ -56,7 +54,6 @@ transform_augment = transforms.Compose([
 
 transform_augment2 = transforms.Compose([
     transforms.Resize(size=(224,224)),
-    transforms.Grayscale(num_output_channels=3),
     transforms.RandomRotation(degrees=(-15, -15)),
     #transforms.GaussianBlur(kernel_size=(5, 5)),
     transforms.ColorJitter(contrast=(0.5, 0.5)),
@@ -71,10 +68,12 @@ transform = transforms.Compose([
     normalize,
 ])
 
-
-    
+  
+transform_three_imgs = transforms.Compose([
+    transforms.Grayscale(num_output_channels=3), # to compatible with resnet
+    ])
 class OCTDataset(Dataset):
-    def __init__(self, args, subset='train', transform=None,):
+    def __init__(self, args, subset='train', transform=None,model = None):
         if subset == 'train':
             self.annot = pd.read_csv(args.annot_train_prime)
         elif subset == 'test':
@@ -87,6 +86,8 @@ class OCTDataset(Dataset):
             self.annot_labels = temp + temp + temp
         else:
             self.annot_labels = temp
+        
+        self.model = model
         # print(self.annot)
         self.root = os.path.expanduser(args.data_root)
         self.transform = transform
@@ -146,9 +147,12 @@ class OCTDataset(Dataset):
                 img = self.transform_aug(img)
             elif self.transform_aug2 is not None and data_aug == 2 and self.subset == 'train':
                 img = self.transform_aug2(img)
-
-            img_volume.append(img)
-
+            
+            if self.model == "vit":
+                img_volume.append(img)
+            else:
+                img = transform_three_imgs(img)
+                img_volume.append(img)
         #img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
 
         # if self.transform is not None:
@@ -244,11 +248,11 @@ def svm_dataloader(args, model_name):
 
 def dataloader(args, model_name):
     if (model_name == 'ResNet'):
-        trainset = OCTDataset(args, 'train', transform=transform_resnet)
-        testset = OCTDataset(args, 'test', transform=transform_resnet)
+        trainset = OCTDataset(args, 'train', transform=transform_resnet, model=model_name)
+        testset = OCTDataset(args, 'test', transform=transform_resnet, model=model_name)
     else:
-        trainset = OCTDataset(args, 'train', transform=transform)
-        testset = OCTDataset(args, 'test', transform=transform)
+        trainset = OCTDataset(args, 'train', transform=transform, model=model_name)
+        testset = OCTDataset(args, 'test', transform=transform, model=model_name)
 
     print(len(trainset))
     print(len(testset))
