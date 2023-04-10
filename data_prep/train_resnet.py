@@ -63,7 +63,7 @@ class ImageMetadataModel(nn.Module):
             self.final_mlp = nn.Sequential(
                 nn.Linear(num_features + 64, 256),
                 nn.ReLU(inplace=True),
-                nn.Dropout(p=0.3), # lr 0.0001 seems will overfitting after epoch 10
+                nn.Dropout(p=0.5), # lr 0.0001 seems will overfitting after epoch 10
                 nn.Linear(256, 3),
                 nn.Softmax(dim=1)
             )
@@ -243,7 +243,7 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
     logfile.write(best_epoch_msg)
     logfile.close()
     
-    torch.save(best_model.state_dict(), args.save_pth)
+    torch.save(best_model, args.save_pth)
     
     with open(args.save_pred,'wb') as f:
         pickle.dump(best_pred, f)
