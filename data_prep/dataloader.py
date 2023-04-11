@@ -114,7 +114,9 @@ class OCTDataset(Dataset):
         # print(self.label_freq)
         #self._metadata 
         temp_meta = self.annot[['Leakage_Index', 'Age']].values.astype(np.float32)
-        
+        # print(temp_meta)
+        self.meta_avg = np.mean(temp_meta, axis=0)
+        # print(self.meta_avg)
         # if (subset == 'train'):
         #     self._metadata = temp_meta + temp_meta
         # else:
@@ -276,7 +278,7 @@ def dataloader(args, model_name):
         batched_trainset = DataLoader(trainset, batch_size=len(trainset), shuffle=True)
         batched_testset = DataLoader(testset, batch_size=len(testset), shuffle=True)
 
-    return batched_trainset, batched_testset, trainset.label_freq, testset.label_freq
+    return batched_trainset, batched_testset, trainset.label_freq, testset.label_freq , trainset.meta_avg
 
 # def parse_args():
 #     parser = argparse.ArgumentParser()

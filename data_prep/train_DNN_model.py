@@ -15,19 +15,31 @@ import os
 import copy
 import dataloader
 
+def Severity_to_DRRS( serverity):
+#     DRSS = []
+#     for i in serverity:
+#         if i <= 1:
+#             DRSS.append(0)
+#         elif i<= 3:
+#             DRSS.append(1)
+#         else:
+#             DRSS.append(2)
+# 
+#     return torch.FloatTensor(DRSS)
+    return serverity
 # Define the model architecture
 class ImageMetadataClassifier(nn.Module):
-    def __init__(self):
+    def __init__(self, num_class):
         super(ImageMetadataClassifier, self).__init__()
 #         vit_model = torchvision.models.vit_b_16(,dropout=0.2)
         vit_model = torchvision.models.VisionTransformer(
                 image_size = 224,
                 patch_size=16,
-                num_layers=4,
+                num_layers=3,
                 num_heads=8,
                 hidden_dim=512,
                 mlp_dim=2048,
-                dropout=0.2,
+                dropout=0.0,
                 num_classes = 32)
         vit_model.conv_proj = nn.Conv2d(49 , 512 , kernel_size=(16,16), stride=(16,16))
 #         vit_model.encoder.layers = nn.Sequential( *list(vit_model.encoder.layers.children()))      ## Have only 2 Encoders
@@ -39,11 +51,11 @@ class ImageMetadataClassifier(nn.Module):
 #                 mnasnet
 #         )
         self.metadata_fc = nn.Sequential(
-                nn.Linear(9, 8),
+                nn.Linear(2, 4),
                 nn.ReLU(),
                 # Add more layers as needed
                 )
-        self.classifier = nn.Linear(32 + 8, 3)
+        self.classifier = nn.Linear(32 + 4, num_class)
 
     def forward(self, x, metadata):
 #         print(x.dtype,metadata.dtype)
@@ -55,9 +67,9 @@ class ImageMetadataClassifier(nn.Module):
         return x
 
 
-def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
+def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta_avg, num_class):
     # Define model
-    model = ImageMetadataClassifier()
+    model = ImageMetadataClassifier(num_class)
     print(model)
 
     if( args.load_checkpoint is not None):
@@ -69,7 +81,9 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
             print("Checkpoint load failed")
 
     # Define optimizer and loss function
-    criterion = nn.CrossEntropyLoss()
+    weight = weight.to(device)
+    criterion = nn.CrossEntropyLoss(weight=weight) # loss function
+#     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW( model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
   
     ## Autoscaling while training can speedup train time on newer GPUs like V100 and A100
@@ -77,6 +91,7 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
 
     ## Define LR schedular
     if(args.lr_scheduler):
+        print("Enabling LR scheduler")
         warmup_lr_scheduler = torch.optim.lr_scheduler.LinearLR(
                                 optimizer, start_factor=0.01, total_iters=args.lr_warmup_epochs
                                             )
@@ -114,7 +129,14 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
             labels = labels.to(device)
             metadata = metadata.to(device)
             images = torch.flatten(images , start_dim = 1 , end_dim =2)
-#             print(metadata.shape, metadata)
+
+            has_nan = torch.isnan(metadata)
+            any_nan = torch.any(has_nan)
+            if (any_nan):
+                metadata = torch.zeros(metadata.shape, device= device)
+            else:
+                metadata = metadata.to(device)
+
             # Forward pass
             with torch.cuda.amp.autocast(enabled=scaler is not None):
                 outputs = model(x = images, metadata = metadata)
@@ -139,6 +161,10 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
             running_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
             total_predictions += labels.size(0)
+#             print(predicted.type(),labels.type())
+            predicted = Severity_to_DRRS(predicted)
+            labels = Severity_to_DRRS(labels)
+#             print(predicted.type(),labels.type())
             correct_predictions += (predicted == labels).sum().item()
             labels_all.append(labels)
             predicted_all.append(predicted)
@@ -147,8 +173,12 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
 #         print(np.shape(labels_all),np.shape(predicted_all))
         labels_all =  torch.cat(labels_all, dim=0).cpu()
         predicted_all =  torch.cat(predicted_all, dim=0).cpu()
+        unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
+        unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
+
 #         print(labels_all,predicted_all)
         print("Train Balanced accuracy: ", sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)) 
+        print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
         
         
         if(args.lr_scheduler):
@@ -167,7 +197,7 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
                 for images, labels, _ in batched_testset:
                     images = images.to(device)
                     labels = labels.to(device)
-                    metadata = torch.zeros(_.shape, device= device)
+                    metadata = torch.float(train_meta_avg, device= device)
 
                     images = torch.flatten(images , start_dim = 1 , end_dim =2)
                     # Forward pass
@@ -178,6 +208,8 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
                     test_loss += loss.item()
                     _, predicted = torch.max(outputs.data, 1)
                     test_total_predictions += labels.size(0)
+                    predicted = Severity_to_DRRS(predicted)
+                    labels = Severity_to_DRRS(labels)
                     test_correct_predictions += (predicted == labels).sum().item()
                     labels_all.append(labels)
                     predicted_all.append(predicted)
@@ -186,6 +218,12 @@ def train_dnn(args, device,batched_trainset, batched_testset ,num_class):
                 labels_all =  torch.cat(labels_all, dim=0).cpu()
                 predicted_all =  torch.cat(predicted_all, dim=0).cpu()
                 test_balanced_accuracy = sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)
+                unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
+                unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
+
+#         print(labels_all,predicted_all)
+                print(" Test output distribution for labels, predicted: ",counts_labels, counts_predicted) 
+                print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
                 print(" Test Balanced accuracy: ", test_balanced_accuracy) 
  #                     print(" predicted :", predicted)
 #                     print(" labels :", labels)
@@ -248,8 +286,18 @@ if __name__ == '__main__':
     args.save_pth = os.path.abspath(name)
 
     # # Define dataloader
-    batched_trainset, batched_testset, train_freq, test_freq = dataloader.dataloader(args , args.model) 
+    batched_trainset, batched_testset, train_freq, test_freq, train_meta_avg = dataloader.dataloader(args , args.model) 
     print("Len of Train:",len(batched_trainset)," , Len of Test dataset:",len(batched_testset))
-    train_dnn(args, device, batched_trainset, batched_testset, 3)
+    print(train_freq)
+    print(test_freq)
+    freq = np.array(train_freq) + np.array(test_freq)
+    print(freq)
+    # weight = freq / np.sum(freq)
+    weight = [sum(freq) / (3 * count) for count in freq]
+
+    weight = torch.tensor(weight, dtype=torch.float)
+    print(weight)
+
+    train_dnn(args, device, batched_trainset, batched_testset, weight, train_meta_avg, 3)
 
 
