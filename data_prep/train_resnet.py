@@ -31,7 +31,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Define model that combines ResNet and MLP
 class ImageMetadataModel(nn.Module):
-    def __init__(self, model_name='resnet18', num_class=3):
+    def __init__(self, model_name='resnet18', num_class=3, dropout=0.5):
         super(ImageMetadataModel, self).__init__()
 
         self.model_name = model_name
@@ -41,7 +41,7 @@ class ImageMetadataModel(nn.Module):
             self.resnet.fc = nn.Sequential(
                 nn.Linear(512, 256),
                 nn.ReLU(),
-                nn.Dropout(p=0.2),
+                nn.Dropout(p=dropout),
                 nn.Linear(256, num_class),
                 #nn.Softmax(dim=1)
             )
@@ -63,7 +63,7 @@ class ImageMetadataModel(nn.Module):
             self.final_mlp = nn.Sequential(
                 nn.Linear(num_features + 64, 256),
                 nn.ReLU(inplace=True),
-                nn.Dropout(p=0.5), # lr 0.0001 seems will overfitting after epoch 10
+                nn.Dropout(p=dropout), # lr 0.0001 seems will overfitting after epoch 10, set 0.5 - 0.8
                 nn.Linear(256, 3),
                 nn.Softmax(dim=1)
             )
@@ -118,10 +118,10 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
 
     if (args.meta == 1):
         print('Model: Resnet18 + Meta')
-        model = ImageMetadataModel(model_name='resnet18+meta', num_class=num_class)
+        model = ImageMetadataModel(model_name='resnet18+meta', num_class=num_class, dropout = args.dropout)
     else:
         print('Model: Resnet18')
-        model = ImageMetadataModel(model_name='resnet18', num_class=num_class)
+        model = ImageMetadataModel(model_name='resnet18', num_class=num_class, dropout = args.dropout)
     
     model = model.to(device)
     
@@ -258,8 +258,9 @@ def parse_args():
     parser.add_argument('--seed', type = int, default = 8803)
     parser.add_argument('--opt', type = str, default = 'AdamW')
     parser.add_argument('--lr', type = float, default = 0.001)
-    parser.add_argument('--weight_decay', type = float, default = 0.05)
+    parser.add_argument('--weight_decay', type = float, default = 0.05) # try 0.1?
     parser.add_argument('--momentum', type = float, default = 0.9)
+    parser.add_argument('--dropout', type =float, default = 0.5)
     parser.add_argument('--epoch', type = int, default = 20)
     parser.add_argument('--batch_size', type = int, default = 8)
     parser.add_argument('--do_batch', type = int, default = 1)
@@ -285,7 +286,7 @@ if __name__ == '__main__':
 
     label_base_name = "restnet18_predictlabel_" + timestr + ".pickle"
     save_label = os.path.abspath(os.path.join(args.save_pred, label_base_name))
-    args.save_pred = os.path.abspath(name)
+    args.save_pred = os.path.abspath(save_label)
 
     base_name_log = "restnet18_" + timestr + ".log"
     name_log = os.path.join(args.log, base_name_log)
@@ -307,3 +308,6 @@ if __name__ == '__main__':
     print(weight)
 
     train(args, batched_trainset, batched_testset, weight, 3)
+
+
+# restnet18_20230410-164753 dropout 0.7

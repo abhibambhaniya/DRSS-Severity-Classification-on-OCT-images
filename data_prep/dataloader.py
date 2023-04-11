@@ -61,6 +61,16 @@ transform_augment2 = transforms.Compose([
     normalize,
 ])
 
+# Gaussian Blur
+transform_augment3 = transforms.Compose([
+    transforms.Resize(size=(224,224)),
+    transforms.Grayscale(num_output_channels=3),
+    transforms.GaussianBlur(kernel_size=(5, 5)),
+    # transforms.ColorJitter(contrast=(0.5, 0.5)),
+    transforms.ToTensor(),
+    normalize,
+])
+
 transform = transforms.Compose([
     transforms.Resize(size=(224,224)),
     # transforms.ColorJitter(contrast=(0.5, 0.5)),
@@ -83,7 +93,7 @@ class OCTDataset(Dataset):
         temp = [LABELS_Severity[drss] for drss in copy.deepcopy(self.annot['DRSS'].values)] 
         #self.annot['Severity_Label'] = temp + temp
         if (subset == 'train' and args.data_aug == 1):
-            self.annot_labels = temp + temp + temp
+            self.annot_labels = temp + temp + temp + temp
         else:
             self.annot_labels = temp
         
@@ -93,6 +103,7 @@ class OCTDataset(Dataset):
         self.transform = transform
         self.transform_aug = transform_augment
         self.transform_aug2 = transform_augment2
+        self.transform_aug3 = transform_augment3
         self.subset = subset
         self.nb_classes=len(np.unique(list(LABELS_Severity.values())))
         # self.path_list = self.annot['File_Path'].values
@@ -147,6 +158,8 @@ class OCTDataset(Dataset):
                 img = self.transform_aug(img)
             elif self.transform_aug2 is not None and data_aug == 2 and self.subset == 'train':
                 img = self.transform_aug2(img)
+            elif self.transform_aug3 is not None and data_aug == 3 and self.subset == 'train':
+                img = self.transform_aug3(img)
             
             if self.model == "vit":
                 img_volume.append(img)
