@@ -310,4 +310,4 @@ if __name__ == '__main__':
     train(args, batched_trainset, batched_testset, weight, 3)
 
 
-# restnet18_20230410-164753 dropout 0.7
+# restnet18_20230410-164753 dropout 0.7 with Gaussian

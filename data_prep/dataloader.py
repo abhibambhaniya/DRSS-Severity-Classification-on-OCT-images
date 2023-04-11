@@ -64,7 +64,6 @@ transform_augment2 = transforms.Compose([
 # Gaussian Blur
 transform_augment3 = transforms.Compose([
     transforms.Resize(size=(224,224)),
-    transforms.Grayscale(num_output_channels=3),
     transforms.GaussianBlur(kernel_size=(5, 5)),
     # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
