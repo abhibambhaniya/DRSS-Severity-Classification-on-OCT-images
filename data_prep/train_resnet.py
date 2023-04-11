@@ -13,7 +13,7 @@ import torchvision
 from torchvision import models, transforms
 
 import dataloader
-import resnet as resnet
+import resnet18_3D as resnet
 
 import pandas as pd
 from PIL import Image
@@ -25,7 +25,7 @@ from tqdm import tqdm
 import pickle
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 
 
@@ -36,7 +36,7 @@ class ImageMetadataModel(nn.Module):
 
         self.model_name = model_name
         if (model_name == 'resnet18'):
-            self.resnet = resnet.resnet_18(n_features=3)
+            self.resnet = resnet.resnet_18()
 
             self.resnet.fc = nn.Sequential(
                 nn.Linear(512, 256),
@@ -47,24 +47,24 @@ class ImageMetadataModel(nn.Module):
             )
 
         elif (model_name == 'resnet18+meta'):
-            self.resnet = resnet.resnet_18()
-            num_features = self.resnet.fc.in_features
-            self.resnet.fc = nn.Identity()  # remove last fully connected layer
+            self.resnet = resnet.resnet_18(n_outputs=32)
+            num_features = 32
+            # self.resnet.fc = nn.Identity()  # remove last fully connected layer
 
             # Define MLP for metadata
             self.metadata_mlp = nn.Sequential(
-                nn.Linear(9, 128),
+                nn.Linear(2, 4),
                 nn.ReLU(inplace=True),
-                nn.Linear(128, 64),
+                nn.Linear(4, 4),
                 nn.ReLU(inplace=True),
             )
 
             # Define final MLP layers
             self.final_mlp = nn.Sequential(
-                nn.Linear(num_features + 64, 256),
+                nn.Linear(num_features + 4, 16),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=dropout), # lr 0.0001 seems will overfitting after epoch 10, set 0.5 - 0.8
-                nn.Linear(256, 3),
+                nn.Linear(16, 3),
                 nn.Softmax(dim=1)
             )
 
