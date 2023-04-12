@@ -45,7 +45,7 @@ normalize = transforms.Normalize(mean=mean, std=std)
 
 transform_augment1 = transforms.Compose([
     transforms.Resize(size=(224,224)),
-    transforms.RandomRotation(degrees=(-15, 15)),
+    transforms.RandomRotation(degrees=(3, 3)),
     #transforms.GaussianBlur(kernel_size=(5, 5)),
     transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
@@ -54,23 +54,30 @@ transform_augment1 = transforms.Compose([
 
 transform_augment2 = transforms.Compose([
     transforms.Resize(size=(224,224)),
-    transforms.RandomRotation(degrees=(-15, 15)),
+    transforms.RandomRotation(degrees=(3, 3)),
     transforms.GaussianBlur(kernel_size=(5, 5)),
     # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
 ])
 
-# Gaussian Blur
-# transform_augment3 = transforms.Compose([
-#     transforms.Crop(top=80, height = 330 , width = 504, left = 0),
-#     transforms.Resize(size=(224,224)),
-#     transforms.RandomRotation(degrees=(15, 15)),
-#     transforms.GaussianBlur(kernel_size=(5, 5)),
-#     # transforms.ColorJitter(contrast=(0.5, 0.5)),
-#     transforms.ToTensor(),
-#     normalize,
-# ])
+transform_augment3 = transforms.Compose([
+    transforms.Resize(size=(224,224)),
+    transforms.RandomHorizontalFlip(p=1),
+    transforms.GaussianBlur(kernel_size=(5, 5)),
+    # transforms.ColorJitter(contrast=(0.5, 0.5)),
+    transforms.ToTensor(),
+    normalize,
+])
+
+transform_augment4 = transforms.Compose([
+    transforms.Resize(size=(224,224)),
+    transforms.RandomHorizontalFlip(p=1),
+    # transforms.GaussianBlur(kernel_size=(5, 5)),
+    transforms.ColorJitter(contrast=(0.5, 0.5)),
+    transforms.ToTensor(),
+    normalize,
+])
 
 transform = transforms.Compose([
     transforms.Resize(size=(224,224)),
@@ -94,7 +101,7 @@ class OCTDataset(Dataset):
         temp = [LABELS_Severity[drss] for drss in copy.deepcopy(self.annot['DRSS'].values)] 
         #self.annot['Severity_Label'] = temp + temp
         if (subset == 'train' and args.data_aug == 1):
-            self.annot_labels = 11 * temp # 0: original. 1 - 5: rotate and color jitter. 6 - 10: rotate and gaussian
+            self.annot_labels = 5 * temp # 0: original. 1 - 5: rotate and color jitter. 6 - 10: rotate and gaussian
         else:
             self.annot_labels = temp
         
@@ -104,6 +111,8 @@ class OCTDataset(Dataset):
         self.transform = transform
         self.transform_aug1 = transform_augment1
         self.transform_aug2 = transform_augment2
+        self.transform_aug3 = transform_augment3
+        self.transform_aug4 = transform_augment4
         self.subset = subset
         self.nb_classes=len(np.unique(list(LABELS_Severity.values())))
         # self.path_list = self.annot['File_Path'].values
@@ -161,10 +170,14 @@ class OCTDataset(Dataset):
 
             if self.transform is not None and data_aug == 0:
                 img = self.transform(img)
-            elif self.transform_aug1 is not None and data_aug >= 1 and data_aug <= 5 and self.subset == 'train':
+            elif self.transform_aug1 is not None and data_aug == 1 and self.subset == 'train':
                 img = self.transform_aug1(img)
-            elif self.transform_aug2 is not None and data_aug >= 6 and data_aug <= 10 and self.subset == 'train':
+            elif self.transform_aug2 is not None and data_aug == 2 and self.subset == 'train':
                 img = self.transform_aug2(img)
+            elif self.transform_aug2 is not None and data_aug == 3 and self.subset == 'train':
+                img = self.transform_aug3(img)
+            elif self.transform_aug2 is not None and data_aug == 4 and self.subset == 'train':
+                img = self.transform_aug4(img)
 
             img_volume.append(img)
         #img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]

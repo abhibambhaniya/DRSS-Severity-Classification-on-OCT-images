@@ -85,7 +85,7 @@ class ImageMetadataModel(nn.Module):
 
 
 
-def train(args, batched_trainset, batched_testset, weight, num_class):
+def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_class):
 
     logfile = open(args.log, "w")
 
@@ -205,7 +205,7 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
 
                 # out = model(test_data)
                 out = model(test_data, metadata)
-                print(out)
+                # print(out)
 
                 _, prediction = torch.max(out, 1)
                 loss = loss_fn(out, test_label)
@@ -235,11 +235,17 @@ def train(args, batched_trainset, batched_testset, weight, num_class):
                 best_pred['label'] = test_balanced_true
                 best_pred['prediction'] = test_balanced_predict
 
+        if epoch % 3 == 0:
+            logfile.write('Checkpoint: Saving the model with the best test balanced accuracy....')
+            logfile.write(best_epoch_msg)
+            torch.save(best_model, args.save_pth)
+            with open(args.save_pred,'wb') as f:
+                pickle.dump(best_pred, f)
 
         logfile.close()
 
     logfile = open(args.log, "a")
-    logfile.write('Saving the model with the best test balanced accuracy....')
+    logfile.write('Last Checkpoint: Saving the model with the best test balanced accuracy....')
     logfile.write(best_epoch_msg)
     logfile.close()
     
@@ -295,11 +301,11 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    batched_trainset, batched_testset, train_freq, test_freq = dataloader.dataloader(args, 'ResNet')
+    batched_trainset, batched_testset, train_freq, test_freq, train_meta_avg = dataloader.dataloader(args, 'ResNet')
 
     print(train_freq)
     print(test_freq)
-    freq = np.array(train_freq) + np.array(test_freq)
+    freq = np.array(train_freq)
     print(freq)
     # weight = freq / np.sum(freq)
     weight = [sum(freq) / (3 * count) for count in freq]
@@ -307,7 +313,7 @@ if __name__ == '__main__':
     weight = torch.tensor(weight, dtype=torch.float)
     print(weight)
 
-    train(args, batched_trainset, batched_testset, weight, 3)
+    train(args, batched_trainset, batched_testset, weight, train_meta_avg, 3)
 
 
 # restnet18_20230410-164753 dropout 0.7 with Gaussian
