@@ -31,7 +31,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Define model that combines ResNet and MLP
 class ImageMetadataModel(nn.Module):
-    def __init__(self, model_name='resnet18', num_class=3, dropout=0.5):
+    def __init__(self, model_name='resnet18', num_class=3, dropout=0.5, num_meta=2):
         super(ImageMetadataModel, self).__init__()
 
         self.model_name = model_name
@@ -53,7 +53,7 @@ class ImageMetadataModel(nn.Module):
 
             # Define MLP for metadata
             self.metadata_mlp = nn.Sequential(
-                nn.Linear(2, 4),
+                nn.Linear(num_meta, 4),
                 nn.ReLU(inplace=True),
                 nn.Linear(4, 4),
                 nn.ReLU(inplace=True),
@@ -92,8 +92,6 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
     logfile.write(str(args))
     logfile.write('\n')
 
-    logfile.close()
-
     # #model = models.resnet18(weights='DEFAULT')
     # model = resnet.resnet_18(n_features=3) # untrained model taken from open-source github repo
     # #print(model)
@@ -118,9 +116,11 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
 
     if (args.meta == 1):
         print('Model: Resnet18 + Meta')
-        model = ImageMetadataModel(model_name='resnet18+meta', num_class=num_class, dropout = args.dropout)
+        logfile.write('Model: Resnet18 + Meta\n')
+        model = ImageMetadataModel(model_name='resnet18+meta', num_class=num_class, dropout = args.dropout, num_meta=args.num_meta)
     else:
         print('Model: Resnet18')
+        logfile.write('Model: Resnet18\n')
         model = ImageMetadataModel(model_name='resnet18', num_class=num_class, dropout = args.dropout)
     
     model = model.to(device)
@@ -129,15 +129,19 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
         weight = weight.to(device)
         loss_fn = nn.CrossEntropyLoss(weight=weight) # loss function
         print('doing weighted loss')
+        logfile.write('doing weighted loss\n')
     else:
         loss_fn = nn.CrossEntropyLoss() # loss function
         print('doing unweighted loss')
+        logfile.write('doing unweighted loss\n')
 
     if (args.opt == 'AdamW'):
         optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     elif (args.opt == 'SGD'):
         optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     
+    logfile.close()
+
     best_balanced_accuracy = 0.0
     best_epoch_msg = None
     best_model = None
@@ -231,7 +235,7 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
             if (best_balanced_accuracy < test_balanced_accuracy):
                 best_balanced_accuracy = test_balanced_accuracy
                 best_epoch_msg = test_msg
-                best_model = model.state_dict()
+                best_model = copy.deepcopy(model.state_dict())
                 best_pred['label'] = test_balanced_true
                 best_pred['prediction'] = test_balanced_predict
 
@@ -254,9 +258,19 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
     with open(args.save_pred,'wb') as f:
         pickle.dump(best_pred, f)
     
-def test_model(model, batched_testset):
+def test_model(model_val, batched_testset, num_class):
     
-    model.eval() # evaluation phase
+    if (args.meta == 1):
+        print('Model: Resnet18 + Meta')
+        model = ImageMetadataModel(model_name='resnet18+meta', num_class=num_class, dropout = args.dropout)
+    else:
+        print('Model: Resnet18')
+        model = ImageMetadataModel(model_name='resnet18', num_class=num_class, dropout = args.dropout)
+    
+    model.load_state_dict(model_val)
+
+    model = model.to(torch.device('cuda:0'))
+    model.eval()
     with torch.no_grad():
         test_loss = 0
         test_correct_num = 0
@@ -303,6 +317,7 @@ def parse_args():
     parser.add_argument('--batch_size', type = int, default = 8)
     parser.add_argument('--do_batch', type = int, default = 1)
     parser.add_argument('--meta', type = int, default = 1)
+    parser.add_argument('--num_meta', type = int, default = 2)
     parser.add_argument('--weighted_loss', type = int, default = 1)
     parser.add_argument('--data_aug', type =int, default = 1)
     parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
@@ -346,8 +361,8 @@ if __name__ == '__main__':
     print(weight)
 
     if (args.model_test == 1):
-        model = torch.load(args.model_name, map_location=torch.device('cuda:0'))
-        test_model(model, batched_testset)
+        model_val = torch.load(args.model_name, map_location=torch.device('cuda:0'))
+        test_model(model_val, batched_testset, 3)
     else:
         train(args, batched_trainset, batched_testset, weight, train_meta_avg, 3)
 

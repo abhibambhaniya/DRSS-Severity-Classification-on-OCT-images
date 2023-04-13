@@ -115,7 +115,11 @@ class OCTDataset(Dataset):
         self.label_freq = [(list(self._labels)).count(0), (list(self._labels)).count(1), (list(self._labels)).count(2)]
         # print(self.label_freq)
         #self._metadata 
-        temp_meta = self.annot[['Leakage_Index', 'Age']].values.astype(np.float32)
+        if (args.num_meta == 9):
+            temp_meta = self.annot[['Gender', 'Race', 'Diabetes_Type', 'Diabetes_Years', 'BMI', 'BCVA', 'CST', 'Leakage_Index', 'Age']].values.astype(np.float32)
+        elif (args.num_meta == 2):
+            temp_meta = self.annot[['Leakage_Index', 'Age']].values.astype(np.float32)
+            
         # print(temp_meta)
         self.meta_avg = np.mean(temp_meta, axis=0)
         # print(self.meta_avg)
