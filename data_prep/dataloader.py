@@ -12,13 +12,6 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from skimage.feature import hog
 
-orientations = 9
-pixels_per_cell = (8, 8)
-cells_per_block = (2, 2)
-visualize = False
-transform_sqrt = True
-
-n_components = 49
 
 
 
@@ -163,7 +156,7 @@ class OCTDataset(Dataset):
                 else:
                     print('ERROR: Test Data missing frames')
 
-            img = transforms.functional.crop(img, top=80, height = 330 , width = 504, left = 0)
+            # img = transforms.functional.crop(img, top=80, height = 330 , width = 504, left = 0)
 
             if not self.model == "vit": 
                 img = transform_three_imgs(img)
@@ -212,6 +205,10 @@ def image_feature_extraction(args, data_type):
     #img_volume.fill([])
     # features = np.zeros((len(labels), 49))
     img_volume = []
+
+    orientations = 9
+    pixels_per_cell = (8, 8)
+    cells_per_block = (2, 2)
     
     scaler = StandardScaler()
     for index in range(len(path_list)):
@@ -235,7 +232,7 @@ def image_feature_extraction(args, data_type):
                 continue
     
             hog_features = hog(img, orientations=orientations, pixels_per_cell=pixels_per_cell,
-                       cells_per_block=cells_per_block, visualize=visualize, transform_sqrt=transform_sqrt)
+                       cells_per_block=cells_per_block, visualize=False, transform_sqrt=True)
             frames.append(hog_features)
             # img = svm_transform(img)
             # img = np.array(img)
@@ -243,7 +240,7 @@ def image_feature_extraction(args, data_type):
 
         features = np.array(frames)
         normalized_features = scaler.fit_transform(features)
-        pca = PCA(n_components=n_components)
+        pca = PCA(n_components=args.n_components)
         reduced_features = pca.fit_transform(normalized_features)
 
         img_volume.append(reduced_features)

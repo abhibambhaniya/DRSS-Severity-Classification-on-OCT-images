@@ -23,9 +23,7 @@ def parse_args():
     parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv')
     parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv')
     parser.add_argument('--data_root', type = str, default = '')
-    parser.add_argument('--lr', type = float, default = 0.001)
-    parser.add_argument('--epoch', type = int, default = 50)
-    parser.add_argument('--batch_size', type = int, default = 64)
+    parser.add_argument('--n_components', type = int, default = 49)
     parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/SVM')
     parser.add_argument('--save_pickle', type = str, default = '/usr/scratch/yangyu/FML_Model/SVM')
 
@@ -68,6 +66,7 @@ if __name__ == '__main__':
     msg = f'Train Feature Size: {np.shape(train_features)}, Test Feature Size: {np.shape(test_features)} \n'
 
     # print("Train Feature Size:", np.shape(train_features), "Test Feature Size:", np.shape(test_features))
+    logfile.write(str(args))
     logfile.write(msg)
 
     svm = SVC(kernel='linear')
