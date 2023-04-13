@@ -25,7 +25,7 @@ from tqdm import tqdm
 import pickle
 
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 
@@ -254,13 +254,45 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
     with open(args.save_pred,'wb') as f:
         pickle.dump(best_pred, f)
     
+def test_model(model, batched_testset):
+    
+    model.eval() # evaluation phase
+    with torch.no_grad():
+        test_loss = 0
+        test_correct_num = 0
+        test_total_num = 0
+        test_balanced_predict = []
+        test_balanced_true = []
 
+        for test_data, test_label, _ in batched_testset:
+            test_data = test_data.to(torch.device('cuda:0'))
+            test_label = test_label.to(torch.device('cuda:0'))
+            metadata = torch.zeros(_.shape, device= torch.device('cuda:0'))
+
+            out = model(test_data, metadata)
+
+            _, prediction = torch.max(out, 1)
+            
+            test_correct_num += (prediction == test_label).sum().item()
+            test_total_num += test_label.size(0)
+
+            test_balanced_predict.extend(prediction.detach().cpu().numpy().tolist())
+            test_balanced_true.extend(test_label.detach().cpu().numpy().tolist())
+
+        test_accuracy = test_correct_num / test_total_num
+        test_balanced_accuracy = balanced_accuracy_score(test_balanced_true, test_balanced_predict)
+
+
+        test_msg = f'Test Loss: {test_loss}, Accuracy: {test_accuracy}, Balanced Accuracy: {test_balanced_accuracy} \n'
+        print(test_msg)
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv')
     parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv')
     parser.add_argument('--data_root', type = str, default = '')
+    parser.add_argument('--model_test', type =int, default = 0, help="Directly load model and run on test data")
+    parser.add_argument('--model_name', type = str, default = '', help="The model to load for testing")
     parser.add_argument('--seed', type = int, default = 8803)
     parser.add_argument('--opt', type = str, default = 'AdamW')
     parser.add_argument('--lr', type = float, default = 0.001)
@@ -313,7 +345,11 @@ if __name__ == '__main__':
     weight = torch.tensor(weight, dtype=torch.float)
     print(weight)
 
-    train(args, batched_trainset, batched_testset, weight, train_meta_avg, 3)
+    if (args.model_test == 1):
+        model = torch.load(args.model_name, map_location=torch.device('cuda:0'))
+        test_model(model, batched_testset)
+    else:
+        train(args, batched_trainset, batched_testset, weight, train_meta_avg, 3)
 
 
 # restnet18_20230410-164753 dropout 0.7 with Gaussian
