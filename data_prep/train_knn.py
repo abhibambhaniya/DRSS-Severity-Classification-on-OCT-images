@@ -28,7 +28,7 @@ def knn_dataloader(args, file = 'df_prime_train_features.csv'):
     # nb_classes=len(np.unique(list(LABELS_Severity.values())))
     path_list = annot['Volume_ID'].values
 
-    labels = annot['Severity_Label'].values.reshape(-1,1)
+    labels = annot['Severity_Label'].values
     # print(labels)
     # assert len(path_list) == len(labels)
     root = os.path.expanduser(args.data_root)
@@ -55,7 +55,7 @@ def knn_dataloader(args, file = 'df_prime_train_features.csv'):
             elif (os.path.isfile(os.path.join(folder_path, png))):
                 img = Image.open(os.path.join(folder_path, png)).convert("L")
             else:
-                img = frames[i -starting_frame - 1]
+#                 img = frames[i -starting_frame - 1]
                 frames.append(frames[i -starting_frame - 1])
                 continue
             frames.append(np.asarray(img)[106:224,80:450])
@@ -72,25 +72,12 @@ def knn_dataloader(args, file = 'df_prime_train_features.csv'):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type = str, default = 'maxvit')
+    parser.add_argument('--model', type = str, default = 'knn')
     parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv')
     parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv')
     parser.add_argument('--data_root', type = str, default = '/usr/scratch/abhimanyu/courses/ECE8803_FML/OLIVES')
     parser.add_argument('--data_aug', type =int, default = 1)
-    parser.add_argument('--lr', type = float, default = 5e-4)
-    parser.add_argument('--weight_decay', type = float, default = 0.1)
-    parser.add_argument('--momentum', type = float, default = 0.9)
-    parser.add_argument('--epoch', type = int, default = 50)
-    parser.add_argument('--batch_size', type = int, default = 1000)
-    parser.add_argument('--save_pth', type = str, default = '/storage/home/hpaceice1/abambhaniya3/DRSS-Severity-Classification-on-OCT-images/VIT_model_checkpoints/')
-    parser.add_argument('--load_checkpoint', type = str, default = None)
-    parser.add_argument("--lr-warmup-epochs", default=5, type=int, help="the number of epochs to warmup (default: 5)")
-    parser.add_argument("--lr-min", default=1e-5, type=float, help="minimum lr of lr schedule (default: 1e-5)")
-    # Mixed precision training parameters
-    parser.add_argument("--amp", action="store_true", help="Use torch.cuda.amp for mixed precision training")
-    parser.add_argument("--lr_scheduler", type=bool, default = False, help="Wethear to turn of LR scheduling or not ") 
-    parser.add_argument("--do_batch", type=int, default = 1, help="Wethear to do batching ") 
-    
+   
     return parser.parse_known_args()
 
 
@@ -111,7 +98,7 @@ if __name__ == '__main__':
     # Create and train KNN classifier
     
     y_pred_all = []
-    for k in [3,5,7,9,11,15]:
+    for k in range(3,15):
         clf = KNeighborsClassifier(n_neighbors=k)
         clf.fit(X_train, y_train)
 
@@ -120,4 +107,5 @@ if __name__ == '__main__':
         y_pred_all.append(y_pred)
         # Calculate accuracy
         accuracy = accuracy_score(y_test, y_pred)
-        print(f"Accuracy: {accuracy:.4f}")
+        balanced_accuracy = balanced_accuracy_score(y_test,y_pred)
+        print(f" For K: {k} Accuracy: {accuracy} Balanced Accuracy: {balanced_accuracy}")
