@@ -40,7 +40,7 @@ class ImageMetadataModel(nn.Module):
 
             self.resnet.fc = nn.Sequential(
                 nn.Linear(512, 256),
-                nn.ReLU(),
+                nn.ReLU(inplace=True),
                 nn.Dropout(p=dropout),
                 nn.Linear(256, num_class),
                 #nn.Softmax(dim=1)
