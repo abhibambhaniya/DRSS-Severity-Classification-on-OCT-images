@@ -1,4 +1,4 @@
-# Taken from github repo: https://github.com/ellisdg/3DUnetCNN
+# This file source from github repo: https://github.com/ellisdg/3DUnetCNN
 
 """
 Modified from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py

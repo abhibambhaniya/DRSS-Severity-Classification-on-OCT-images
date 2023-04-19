@@ -1,5 +1,4 @@
-# Refer to https://github.com/kenshohara/3D-ResNets-PyTorch 
-# Get pretrained model from: https://drive.google.com/drive/folders/1xbYbZ7rpyjftI_KCk6YuL-XrfQDz7Yd4
+# This is the script that train and test 3D ResNet18 base on OCT dataset
 
 import numpy as np
 import torch
@@ -27,9 +26,8 @@ import pickle
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
-
 # Define model that combines ResNet and MLP
+# Depending on the args.model_name, different network will be constructed
 class ImageMetadataModel(nn.Module):
     def __init__(self, model_name='resnet18', num_class=3, dropout=0.5, num_meta=2):
         super(ImageMetadataModel, self).__init__()
@@ -43,13 +41,11 @@ class ImageMetadataModel(nn.Module):
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=dropout),
                 nn.Linear(256, num_class),
-                #nn.Softmax(dim=1)
             )
 
         elif (model_name == 'resnet18+meta'):
             self.resnet = resnet.resnet_18(n_outputs=32)
             num_features = 32
-            # self.resnet.fc = nn.Identity()  # remove last fully connected layer
 
             # Define MLP for metadata
             self.metadata_mlp = nn.Sequential(
@@ -63,14 +59,10 @@ class ImageMetadataModel(nn.Module):
             self.final_mlp = nn.Sequential(
                 nn.Linear(num_features + 4, 16),
                 nn.ReLU(inplace=True),
-                nn.Dropout(p=dropout), # lr 0.0001 seems will overfitting after epoch 10, set 0.5 - 0.8
+                nn.Dropout(p=dropout),
                 nn.Linear(16, 3),
                 nn.Softmax(dim=1)
             )
-
-            #self.resnet = resnet
-            # self.metadata_mlp = metadata_mlp
-            # self.final_mlp = final_mlp
         
     def forward(self, image_data, metadata):
         if (self.model_name == 'resnet18'):
@@ -84,35 +76,13 @@ class ImageMetadataModel(nn.Module):
         return output
 
 
-
+# train 3D ResNet18, and writing the best test balanced accuracy result in pt file, and save the running log
 def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_class):
 
     logfile = open(args.log, "w")
 
     logfile.write(str(args))
     logfile.write('\n')
-
-    # #model = models.resnet18(weights='DEFAULT')
-    # model = resnet.resnet_18(n_features=3) # untrained model taken from open-source github repo
-    # #print(model)
-
-
-    # # for param in model.parameters():
-    # #     param.requires_grad = False
-
-    # # Replace the fully connected layers with new layers that include L2 regularization
-    # model.fc = nn.Sequential(
-    #     nn.Linear(512, 256),
-    #     nn.ReLU(),
-    #     nn.Dropout(p=0.3),
-    #     nn.Linear(256, num_class),
-    #     #nn.Softmax(dim=1)
-    # )
-
-    # # k = model.fc.in_features
-    # # model.fc = nn.Linear(k, num_class)
-    # # print(model)
-    # model = model.to(device)
 
     if (args.meta == 1):
         print('Model: Resnet18 + Meta')
@@ -149,7 +119,6 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
     start = time.time()
     for epoch in range(args.epoch):
         logfile = open(args.log, "a")
-        # print("Running Epoch: ", epoch+1, "/", args.epoch,  " with learning rate: ", args.lr, " and momentum: ", args.momentum)
         
         model.train() # train phase
 
@@ -159,11 +128,11 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
         train_balanced_predict = []
         train_balanced_true = []
 
-
         for train_data, train_label, metadata in tqdm(batched_trainset, desc=f"Epoch {epoch+1}/{args.epoch}"):
             train_data = train_data.to(device)
             train_label = train_label.to(device)
 
+            # check if NaN number is showing up for indexed metadata
             has_nan = torch.isnan(metadata)
             any_nan = torch.any(has_nan)
             if (any_nan):
@@ -171,13 +140,14 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
             else:
                 metadata = metadata.to(device)
 
+            # take the output and do backward propogation
             out = model(train_data, metadata)
-            # out = model(train_data)
             loss = loss_fn(out, train_label)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+            # take the prediction, and accumulate data for later collection
             _, prediction = torch.max(out, dim=1)
             train_loss += loss.item()
             train_correct_num += (prediction == train_label).sum().item()
@@ -207,16 +177,12 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
                 test_label = test_label.to(device)
                 metadata = torch.zeros(_.shape, device= device)
 
-                # out = model(test_data)
                 out = model(test_data, metadata)
-                # print(out)
 
                 _, prediction = torch.max(out, 1)
                 loss = loss_fn(out, test_label)
                 test_loss += loss.item()
-                # print(test_label)
-                # print(prediction)
-                # print('\n')
+                
                 test_correct_num += (prediction == test_label).sum().item()
                 test_total_num += test_label.size(0)
 
@@ -226,7 +192,6 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
             test_loss = test_loss / len(batched_testset)
             test_accuracy = test_correct_num / test_total_num
             test_balanced_accuracy = balanced_accuracy_score(test_balanced_true, test_balanced_predict)
-
 
             test_msg = f'Epoch: {epoch + 1}/{args.epoch} Test Loss: {test_loss}, Accuracy: {test_accuracy}, Balanced Accuracy: {test_balanced_accuracy}, time spent: {time.time() - start} s \n'
             print(test_msg)
@@ -239,10 +204,11 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
                 best_pred['label'] = test_balanced_true
                 best_pred['prediction'] = test_balanced_predict
 
+        # save the best model every three epochs
         if epoch % 3 == 0:
             logfile.write('Checkpoint: Saving the model with the best test balanced accuracy....')
             logfile.write(best_epoch_msg)
-            torch.save(best_model, args.save_pth)
+            torch.save(best_model, args.save_pt)
             with open(args.save_pred,'wb') as f:
                 pickle.dump(best_pred, f)
 
@@ -253,11 +219,14 @@ def train(args, batched_trainset, batched_testset, weight, train_meta_avg, num_c
     logfile.write(best_epoch_msg)
     logfile.close()
     
-    torch.save(best_model, args.save_pth)
+    # after all epochs, save the best model
+    torch.save(best_model, args.save_pt)
     
     with open(args.save_pred,'wb') as f:
         pickle.dump(best_pred, f)
     
+
+# test-only function, taken the pt file, the function will run a prediction on the test dataset
 def test_model(model_val, batched_testset, num_class):
     
     if (args.meta == 1):
@@ -296,33 +265,32 @@ def test_model(model_val, batched_testset, num_class):
         test_accuracy = test_correct_num / test_total_num
         test_balanced_accuracy = balanced_accuracy_score(test_balanced_true, test_balanced_predict)
 
-
         test_msg = f'Test Loss: {test_loss}, Accuracy: {test_accuracy}, Balanced Accuracy: {test_balanced_accuracy} \n'
         print(test_msg)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv')
-    parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv')
-    parser.add_argument('--data_root', type = str, default = '')
+    parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv', help="The volume granularity trainset csv")
+    parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv', help="The volume granularity testset csv")
+    parser.add_argument('--data_root', type = str, default = '', help="The root of where data locate")
     parser.add_argument('--model_test', type =int, default = 0, help="Directly load model and run on test data")
     parser.add_argument('--model_name', type = str, default = '', help="The model to load for testing")
-    parser.add_argument('--seed', type = int, default = 8803)
-    parser.add_argument('--opt', type = str, default = 'AdamW')
-    parser.add_argument('--lr', type = float, default = 0.001)
-    parser.add_argument('--weight_decay', type = float, default = 0.05) # try 0.1?
-    parser.add_argument('--momentum', type = float, default = 0.9)
-    parser.add_argument('--dropout', type =float, default = 0.5)
-    parser.add_argument('--epoch', type = int, default = 20)
-    parser.add_argument('--batch_size', type = int, default = 8)
-    parser.add_argument('--do_batch', type = int, default = 1)
-    parser.add_argument('--meta', type = int, default = 1)
-    parser.add_argument('--num_meta', type = int, default = 2)
-    parser.add_argument('--weighted_loss', type = int, default = 1)
-    parser.add_argument('--data_aug', type =int, default = 1)
-    parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
-    parser.add_argument('--save_pth', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
-    parser.add_argument('--save_pred', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet')
+    parser.add_argument('--seed', type = int, default = 8803, help='The manual seed to specify')
+    parser.add_argument('--opt', type = str, default = 'AdamW', help='The optimizer, AdamW/SGD are available')
+    parser.add_argument('--lr', type = float, default = 0.001, help='Learning rate')
+    parser.add_argument('--weight_decay', type = float, default = 0.05, help='Weight decay for AdamW')
+    parser.add_argument('--momentum', type = float, default = 0.9, help='Momentum for SGD')
+    parser.add_argument('--dropout', type =float, default = 0.5, help='Dropout value for the model fc layer')
+    parser.add_argument('--epoch', type = int, default = 20, help='The number of epochs')
+    parser.add_argument('--batch_size', type = int, default = 8, help='Batch Size')
+    parser.add_argument('--do_batch', type = int, default = 1, help='Do batch or not')
+    parser.add_argument('--meta', type = int, default = 1, help='Use metadata or not')
+    parser.add_argument('--num_meta', type = int, default = 2, help='The number of meta feauters, look at dataloader to see more. Values: 2/9')
+    parser.add_argument('--weighted_loss', type = int, default = 1, help='Do weighted loss or not')
+    parser.add_argument('--data_aug', type =int, default = 1, help='Add data augmentation or not')
+    parser.add_argument('--log', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet', help='Where the log of running store')
+    parser.add_argument('--save_pt', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet', help='Where the pt file store')
+    parser.add_argument('--save_pred', type = str, default = '/usr/scratch/yangyu/FML_Model/resnet', help='Where the prediction result store')
 
     return parser.parse_args()
 
@@ -331,11 +299,12 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
 
+    # use time string so that every run will have unique file name
     timestr = time.strftime("%Y%m%d-%H%M%S")
     
     base_name = "restnet18_" + timestr + ".pt"
-    name = os.path.join(args.save_pth, base_name)
-    args.save_pth = os.path.abspath(name)
+    name = os.path.join(args.save_pt, base_name)
+    args.save_pt = os.path.abspath(name)
 
     label_base_name = "restnet18_predictlabel_" + timestr + ".pickle"
     save_label = os.path.abspath(os.path.join(args.save_pred, label_base_name))
@@ -350,10 +319,7 @@ if __name__ == '__main__':
 
     batched_trainset, batched_testset, train_freq, test_freq, train_meta_avg = dataloader.dataloader(args, 'ResNet')
 
-    print(train_freq)
-    print(test_freq)
     freq = np.array(train_freq)
-    print(freq)
     # weight = freq / np.sum(freq)
     weight = [sum(freq) / (3 * count) for count in freq]
 
@@ -365,6 +331,3 @@ if __name__ == '__main__':
         test_model(model_val, batched_testset, 3)
     else:
         train(args, batched_trainset, batched_testset, weight, train_meta_avg, 3)
-
-
-# restnet18_20230410-164753 dropout 0.7 with Gaussian

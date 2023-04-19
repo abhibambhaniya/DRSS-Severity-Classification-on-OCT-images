@@ -1,5 +1,5 @@
-# Refer to https://github.com/kenshohara/3D-ResNets-PyTorch 
-# Get pretrained model from: https://drive.google.com/drive/folders/1xbYbZ7rpyjftI_KCk6YuL-XrfQDz7Yd4
+# This is the script for SVM model fit and predict
+# Refer to https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html for more about the SVM we use
 
 import numpy as np
 from sklearn.svm import SVC
@@ -29,11 +29,6 @@ def parse_args():
 
     return parser.parse_args()
 
-
-## Take an hour to finish
-## Train Feature Size: (495, 980) Test Feature Size: (163, 980)
-## Accuracy: 0.4049079754601227
-
 if __name__ == '__main__':
     args = parse_args()
 
@@ -46,9 +41,6 @@ if __name__ == '__main__':
     save_feature = os.path.abspath(os.path.join(args.save_pickle, feature_base_name))
 
     args.save_pickle = os.path.abspath(name)
-
-    print(args.save_pickle)
-    print(save_feature)
     
     base_name_log = "svm_" + timestr + ".log"
     name_log = os.path.join(args.log, base_name_log)
@@ -65,7 +57,6 @@ if __name__ == '__main__':
     logfile = open(args.log, "w")
     msg = f'Train Feature Size: {np.shape(train_features)}, Test Feature Size: {np.shape(test_features)} \n'
 
-    # print("Train Feature Size:", np.shape(train_features), "Test Feature Size:", np.shape(test_features))
     logfile.write(str(args))
     logfile.write(msg)
 
@@ -75,7 +66,7 @@ if __name__ == '__main__':
     # Predict the labels of the testing set using the SVM
     test_predictions = svm.predict(test_features)
 
-    # Evaluate the performance of the SVM using metrics such as accuracy, precision, recall, or F1 score
+    # Evaluate the performance of the SVM
     accuracy = accuracy_score(test_labels, test_predictions)
     balanced_accuracy = balanced_accuracy_score(test_labels, test_predictions)
 
@@ -90,8 +81,3 @@ if __name__ == '__main__':
 
     with open(args.save_pickle,'wb') as f:
         pickle.dump(svm, f)
-
-
-    # with open('model.pkl', 'rb') as f:
-    #     clf2 = pickle.load(f)
-    #     clf2.predict(test_features)

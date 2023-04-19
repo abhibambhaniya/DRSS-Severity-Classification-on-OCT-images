@@ -15,7 +15,15 @@ unzip Prime_FULL.zip
 # rm Prime_FULL.zip TREX_DME.zip            ## Uncomment this for removing the zip files.
 
 
-## To prep the data use the following command.
-python dataloader.py --data_root /usr/scratch/abhimanyu/courses/ECE8803_FML/OLIVES
+## To train 3D ResNet18
+python train_resnet.py --data_root /storage/home/hpaceice1/shared-classes/materials/ece8803fml/ --epoch 20 --batch_size 4 --save_pt ../../../ece8803/models/ --log ../../../ece8803/models/ --save_pred ../../../ece8803/models/ --lr 0.0001 --meta 1 --num_meta 9 --dropout 0.5 --seed 8803
 
+## To train ViT
+
+
+## To fit SVM
+python train_svm.py --data_root /storage/home/hpaceice1/shared-classes/materials/ece8803fml/ --save_pickle ../../../ece8803/models/ --log ../../../ece8803/models/ --n_components 49
+
+
+## To fit KNN
 

@@ -1,3 +1,5 @@
+# This is the dataloader file that can be imported as a library for classification. 
+
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
@@ -39,7 +41,6 @@ normalize = transforms.Normalize(mean=mean, std=std)
 transform_augment1 = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.RandomRotation(degrees=(3, 3)),
-    #transforms.GaussianBlur(kernel_size=(5, 5)),
     transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
@@ -49,7 +50,6 @@ transform_augment2 = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.RandomRotation(degrees=(3, 3)),
     transforms.GaussianBlur(kernel_size=(5, 5)),
-    # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
 ])
@@ -58,7 +58,6 @@ transform_augment3 = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.RandomHorizontalFlip(p=1),
     transforms.GaussianBlur(kernel_size=(5, 5)),
-    # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
 ])
@@ -66,7 +65,6 @@ transform_augment3 = transforms.Compose([
 transform_augment4 = transforms.Compose([
     transforms.Resize(size=(224,224)),
     transforms.RandomHorizontalFlip(p=1),
-    # transforms.GaussianBlur(kernel_size=(5, 5)),
     transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
@@ -74,7 +72,6 @@ transform_augment4 = transforms.Compose([
 
 transform = transforms.Compose([
     transforms.Resize(size=(224,224)),
-    # transforms.ColorJitter(contrast=(0.5, 0.5)),
     transforms.ToTensor(),
     normalize,
 ])
@@ -90,16 +87,14 @@ class OCTDataset(Dataset):
         elif subset == 'test':
             self.annot = pd.read_csv(args.annot_test_prime)
             
-        # self.annot['Severity_Label']
         temp = [LABELS_Severity[drss] for drss in copy.deepcopy(self.annot['DRSS'].values)] 
-        #self.annot['Severity_Label'] = temp + temp
         if (subset == 'train' and args.data_aug == 1):
-            self.annot_labels = 5 * temp # 0: original. 1 - 5: rotate and color jitter. 6 - 10: rotate and gaussian
+            self.annot_labels = 5 * temp # 0: original. 1 - 2: rotate and color jitter and gaussian. 3 - 4: horizontal flip and color jitter and gaussian.
         else:
             self.annot_labels = temp
         
         self.model = model
-        # print(self.annot)
+
         self.root = os.path.expanduser(args.data_root)
         self.transform = transform
         self.transform_aug1 = transform_augment1
@@ -111,24 +106,18 @@ class OCTDataset(Dataset):
         # self.path_list = self.annot['File_Path'].values
         self.path_list = self.annot['Volume_ID'].values
         self._labels = self.annot_labels
-        # print(self._labels)
+
         self.label_freq = [(list(self._labels)).count(0), (list(self._labels)).count(1), (list(self._labels)).count(2)]
-        # print(self.label_freq)
-        #self._metadata 
+
         if (args.num_meta == 9):
             temp_meta = self.annot[['Gender', 'Race', 'Diabetes_Type', 'Diabetes_Years', 'BMI', 'BCVA', 'CST', 'Leakage_Index', 'Age']].values.astype(np.float32)
         elif (args.num_meta == 2):
             temp_meta = self.annot[['Leakage_Index', 'Age']].values.astype(np.float32)
             
-        # print(temp_meta)
         self.meta_avg = np.mean(temp_meta, axis=0)
-        # print(self.meta_avg)
-        # if (subset == 'train'):
-        #     self._metadata = temp_meta + temp_meta
-        # else:
+
         self._metadata = temp_meta
         #assert len(self.path_list) == len(self._labels)
-        # idx_each_class = [[] for i in range(self.nb_classes)]
 
     def __getitem__(self, index):
         # img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
@@ -177,10 +166,6 @@ class OCTDataset(Dataset):
                 img = self.transform_aug4(img)
 
             img_volume.append(img)
-        #img, target = Image.open(self.root+self.path_list[index]).convert("L"), self._labels[index]
-
-        # if self.transform is not None:
-        #     img = self.transform(img)
 
         img_volume = torch.stack(img_volume, dim=1)
         return img_volume, target, metadata
@@ -188,7 +173,7 @@ class OCTDataset(Dataset):
     def __len__(self):
         return len(self._labels)     
 
-
+# feature extractor for SVM
 def image_feature_extraction(args, data_type):
     if data_type == 'train':
         annot = pd.read_csv(args.annot_train_prime)
@@ -204,10 +189,6 @@ def image_feature_extraction(args, data_type):
     print(labels)
     assert len(path_list) == len(labels)
 
-    # get features
-    # img_volume = np.zeros((len(labels), 49, 224*224), dtype=object)
-    #img_volume.fill([])
-    # features = np.zeros((len(labels), 49))
     img_volume = []
 
     orientations = 9
@@ -215,8 +196,9 @@ def image_feature_extraction(args, data_type):
     cells_per_block = (2, 2)
     
     scaler = StandardScaler()
+    
+    # Extract feature by hog and then apply PCA
     for index in range(len(path_list)):
-        # img_volume[index] = []
         frames = []
         folder_path = root + path_list[index]
         
@@ -238,9 +220,6 @@ def image_feature_extraction(args, data_type):
             hog_features = hog(img, orientations=orientations, pixels_per_cell=pixels_per_cell,
                        cells_per_block=cells_per_block, visualize=False, transform_sqrt=True)
             frames.append(hog_features)
-            # img = svm_transform(img)
-            # img = np.array(img)
-            # img_volume[index][i] = img.flatten()
 
         features = np.array(frames)
         normalized_features = scaler.fit_transform(features)
@@ -249,19 +228,12 @@ def image_feature_extraction(args, data_type):
 
         img_volume.append(reduced_features)
     
-    print(np.shape(img_volume))
     img_volume = np.array(img_volume)
     ret = img_volume.reshape((len(img_volume), -1))
-    print(np.shape(ret))
-
-
-    # img_volume = np.array(img_volume)
-    # print(len(labels))
-    # print(np.shape(img_volume))
 
     return ret, labels
 
-
+# dataloader for SVM
 def svm_dataloader(args, model_name):
     # this can also be used for another classification we choose
     if (model_name != 'SVM'):
@@ -273,18 +245,11 @@ def svm_dataloader(args, model_name):
 
     return train_features, train_labels, test_features, test_labels
 
-
+# dataloader for model training: ResNet18 etc
 def dataloader(args, model_name):
-    # if (model_name == 'ResNet'):
-    #     trainset = OCTDataset(args, 'train', transform=transform_resnet, model=model_name)
-    #     testset = OCTDataset(args, 'test', transform=transform_resnet, model=model_name)
-    # else:
     trainset = OCTDataset(args, 'train', transform=transform, model=model_name)
     testset = OCTDataset(args, 'test', transform=transform, model=model_name)
 
-    print(len(trainset))
-    print(len(testset))
-    print(args.do_batch)
     if (args.do_batch == 1):
         batched_trainset = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
         batched_testset = DataLoader(testset, batch_size=args.batch_size, shuffle=True)
@@ -293,17 +258,3 @@ def dataloader(args, model_name):
         batched_testset = DataLoader(testset, batch_size=len(testset), shuffle=True)
 
     return batched_trainset, batched_testset, trainset.label_freq, testset.label_freq , trainset.meta_avg
-
-# def parse_args():
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train.csv')
-#     parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test.csv')
-#     parser.add_argument('--data_root', type = str, default = '')
-#     return parser.parse_args()
-
-# if __name__ == '__main__':
-#     args = parse_args()
-#     trainset = OCTDataset(args, 'train', transform=transform)
-#     testset = OCTDataset(args, 'test', transform=transform)
-#     print(trainset[1][0].shape)
-#     print(len(trainset), len(testset))
