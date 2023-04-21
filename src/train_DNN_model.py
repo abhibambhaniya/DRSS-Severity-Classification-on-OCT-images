@@ -9,24 +9,12 @@ import torchvision.models
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import time
-from torchinfo import summary
 import argparse
 import os
-import copy
 import dataloader
 
 import pickle
 def Severity_to_DRRS( serverity):
-#     DRSS = []
-#     for i in serverity:
-#         if i <= 1:
-#             DRSS.append(0)
-#         elif i<= 3:
-#             DRSS.append(1)
-#         else:
-#             DRSS.append(2)
-# 
-#     return torch.FloatTensor(DRSS)
     return serverity
 # Define the model architecture
 class ImageMetadataClassifier(nn.Module):
@@ -78,19 +66,18 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
     logfile.write('\n')
 
     if( args.load_checkpoint is not None):
-        # try:
         print("Trying to Load Checkpoint")
         model.load_state_dict(torch.load(args.load_checkpoint))
         print("Load Checkpoint Successful")
         logfile.write('Loaded checkpoint successfully from' + args.load_checkpoint)
-        # except:
-        #     print("Checkpoint load failed")
-
     logfile.close()
+
+
     # Define optimizer and loss function
     weight = weight.to(device)
-    criterion = nn.CrossEntropyLoss(weight=weight) # loss function
+    criterion = nn.CrossEntropyLoss(weight=weight) # Weighted loss function
 #     criterion = nn.CrossEntropyLoss()
+
     optimizer = optim.AdamW( model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
   
     ## Autoscaling while training can speedup train time on newer GPUs like V100 and A100
@@ -121,6 +108,7 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
     best_test_accuracy = 0 
     best_test_balanced_accuracy = 0 
     best_pred = { }
+
     for epoch in range(num_epochs):
         logfile = open(args.log, "a")
         running_loss = 0.0
@@ -145,10 +133,6 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
                 metadata = torch.zeros(metadata.shape, device= device)
             else:
                 metadata = metadata.to(device)
-            
-            # metadata = torch.from_numpy(np.tile(train_meta_avg, (len(metadata), 1))).to(device)
-            # print(metadata)
-            # torch.float(train_meta_avg, device= device)
 
             # Forward pass
             with torch.cuda.amp.autocast(enabled=scaler is not None):
@@ -179,6 +163,7 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
             labels_all.append(labels)
             predicted_all.append(predicted)
 
+        ## Print Train epoch stats
         labels_all =  torch.cat(labels_all, dim=0).cpu()
         predicted_all =  torch.cat(predicted_all, dim=0).cpu()
         unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
@@ -212,9 +197,14 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
                 for images, labels, _ in batched_testset:
                     images = images.to(device)
                     labels = labels.to(device)
-                    # metadata = torch.float(train_meta_avg, device= device)
-                    metadata = torch.from_numpy(np.tile(train_meta_avg, (len(_), 1))).to(device)
                     images = torch.flatten(images , start_dim = 1 , end_dim =2)
+
+                    ## Pass 0 for metadata in testing
+                    # metadata = torch.float(train_meta_avg, device= device)
+
+                    ## Pass avg of training set metadata in testing.
+                    metadata = torch.from_numpy(np.tile(train_meta_avg, (len(_), 1))).to(device)
+               
                     # Forward pass
                     outputs = model(images,metadata)
                     loss = criterion(outputs, labels)
@@ -229,6 +219,7 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
                     labels_all.append(labels)
                     predicted_all.append(predicted)
 
+                ## Evaluate Test Predictions
                 labels_all =  torch.cat(labels_all, dim=0).cpu()
                 predicted_all =  torch.cat(predicted_all, dim=0).cpu()
                 test_balanced_accuracy = sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)
@@ -241,13 +232,16 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
                     pickle.dump(best_pred, f)
 
                 print(f'Test output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
+            
+            ## Print Test Performance 
             test_loss /= len(batched_testset)
             test_accuracy = test_correct_predictions / test_total_predictions
             
             test_msg = f'Epoch: {epoch + 1}/{args.epoch} Test Loss: {test_loss}, Accuracy: {test_accuracy}, Balanced Accuracy: {test_balanced_accuracy}, time spent: {time.time() - start} s \n'
             print(test_msg)
             logfile.write(test_msg)
-        # Print statistics and add to Tensorboard
+
+        # Print statistics and add to log file
         end_time = time.time()
         if best_test_accuracy < test_accuracy:
             best_test_accuracy = test_accuracy
@@ -257,14 +251,14 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
             best_test_balanced_accuracy = test_balanced_accuracy
             logfile.write(f'Saving chekpoint for the model with the best test balanced accuracy {best_test_balanced_accuracy}') 
 
-        epoch_time = end_time - start_time
+        
         logfile.close()
 
     logfile = open(args.log, "a")
     logfile.write(f'The model with the best test balanced accuracy {best_test_balanced_accuracy} and best test accuracy {best_test_accuracy}')
     logfile.close()
 
-    # torch.save(model.state_dict(), args.save_pth) 
+
 
 def parse_args():
     parser = argparse.ArgumentParser()

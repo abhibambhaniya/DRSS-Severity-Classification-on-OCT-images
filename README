@@ -19,11 +19,15 @@ unzip Prime_FULL.zip
 python train_resnet.py --data_root /storage/home/hpaceice1/shared-classes/materials/ece8803fml/ --epoch 20 --batch_size 4 --save_pt ../../../ece8803/models/ --log ../../../ece8803/models/ --save_pred ../../../ece8803/models/ --lr 0.0001 --meta 1 --num_meta 9 --dropout 0.5 --seed 8803
 
 ## To train ViT
+python train_DNN_model.py --model vit\
+    --epoch 30 --batch_size 8 --lr 5e-3 --weight-decay 0.1 --lr-min 1e-4 --lr-warmup-epochs 5 --lr_scheduler True\
+    --amp --data_root /storage/home/hpaceice1/shared-classes/materials/ece8803fml 
 
+## For more parameters refer to parse_args function in train_DNN_model.py
 
 ## To fit SVM
 python train_svm.py --data_root /storage/home/hpaceice1/shared-classes/materials/ece8803fml/ --save_pickle ../../../ece8803/models/ --log ../../../ece8803/models/ --n_components 49
 
 
 ## To fit KNN
-
+python train_knn.py --data_root /storage/home/hpaceice1/shared-classes/materials/ece8803fml/
