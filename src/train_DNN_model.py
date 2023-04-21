@@ -16,7 +16,6 @@ import copy
 import dataloader
 
 import pickle
-
 def Severity_to_DRRS( serverity):
 #     DRSS = []
 #     for i in serverity:
@@ -41,30 +40,25 @@ class ImageMetadataClassifier(nn.Module):
                 num_heads=8,
                 hidden_dim=512,
                 mlp_dim=2048,
-                dropout=0.0,
+                dropout=0.3,
                 num_classes = 32)
         vit_model.conv_proj = nn.Conv2d(49 , 512 , kernel_size=(16,16), stride=(16,16))
-#         vit_model.encoder.layers = nn.Sequential( *list(vit_model.encoder.layers.children()))      ## Have only 2 Encoders
-#         vit_model.heads.head = nn.Linear(in_features=256, out_features=32, bias=True)
 
         self.image_features = vit_model
-#         mnasnet = torchvision.models.mnasnet1_0(num_classes = 32)
-#         self.image_features = nn.Sequential( nn.Conv2d(49 , 3 , kernel_size=(1,1), stride=(1,1)),
-#                 mnasnet
-#         )
-        self.metadata_fc = nn.Sequential(
-                nn.Linear(2, 4),
-                nn.ReLU(),
-                # Add more layers as needed
-                )
-        self.classifier = nn.Linear(32 + 4, num_class)
+#         self.metadata_fc = nn.Sequential(
+#                 nn.Linear(7, 4),
+#                 nn.ReLU(),
+#                 # Add more layers as needed
+#                 )
+#         self.classifier = nn.Linear(32 + 4, num_class)
+        self.classifier = nn.Linear(32, num_class)
 
     def forward(self, x, metadata):
 #         print(x.dtype,metadata.dtype)
         x = self.image_features(x)
-        x = x.view(x.size(0), -1)
-        metadata_extract = self.metadata_fc(metadata)
-        x = torch.cat([x, metadata_extract], dim=1)
+#         x = x.view(x.size(0), -1)
+#         metadata_extract = self.metadata_fc(metadata)
+#         x = torch.cat([x, metadata_extract], dim=1)
         x = self.classifier(x)
         return x
 
@@ -74,14 +68,25 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
     model = ImageMetadataClassifier(num_class)
     print(model)
 
-    if( args.load_checkpoint is not None):
-        try:
-            print("Trying to Load Checkpoint")
-            model.load_state_dict(torch.load(args.load_checkpoint))
-            print("Load Checkpoint Successful")
-        except:
-            print("Checkpoint load failed")
+    logfile = open(args.log, "w")
 
+    logfile.write(str(args))
+    logfile.write('\n')
+
+
+    logfile.write(str(model))
+    logfile.write('\n')
+
+    if( args.load_checkpoint is not None):
+        # try:
+        print("Trying to Load Checkpoint")
+        model.load_state_dict(torch.load(args.load_checkpoint))
+        print("Load Checkpoint Successful")
+        logfile.write('Loaded checkpoint successfully from' + args.load_checkpoint)
+        # except:
+        #     print("Checkpoint load failed")
+
+    logfile.close()
     # Define optimizer and loss function
     weight = weight.to(device)
     criterion = nn.CrossEntropyLoss(weight=weight) # loss function
@@ -115,7 +120,9 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
 
     best_test_accuracy = 0 
     best_test_balanced_accuracy = 0 
+    best_pred = { }
     for epoch in range(num_epochs):
+        logfile = open(args.log, "a")
         running_loss = 0.0
         correct_predictions = 0.0
         total_predictions = 0.0
@@ -124,67 +131,73 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
         labels_all =  [ ]
         predicted_all = [ ]
 
-#         # Train 1 epoch
-#         for images, labels, metadata in tqdm(batched_trainset, desc=f"Epoch {epoch+1}/{num_epochs}"):
-#             # Move data and labels to device
-#             images = images.to(device)
-#             labels = labels.to(device)
-#             metadata = metadata.to(device)
-#             images = torch.flatten(images , start_dim = 1 , end_dim =2)
+        # Train 1 epoch
+        for images, labels, metadata in tqdm(batched_trainset, desc=f"Epoch {epoch+1}/{num_epochs}"):
+            # Move data and labels to device
+            images = images.to(device)
+            labels = labels.to(device)
+            metadata = metadata.to(device)
+            images = torch.flatten(images , start_dim = 1 , end_dim =2)
 
-#             has_nan = torch.isnan(metadata)
-#             any_nan = torch.any(has_nan)
-#             if (any_nan):
-#                 metadata = torch.zeros(metadata.shape, device= device)
-#             else:
-#                 metadata = metadata.to(device)
+            has_nan = torch.isnan(metadata)
+            any_nan = torch.any(has_nan)
+            if (any_nan):
+                metadata = torch.zeros(metadata.shape, device= device)
+            else:
+                metadata = metadata.to(device)
+            
+            # metadata = torch.from_numpy(np.tile(train_meta_avg, (len(metadata), 1))).to(device)
+            # print(metadata)
+            # torch.float(train_meta_avg, device= device)
 
-#             # Forward pass
-#             with torch.cuda.amp.autocast(enabled=scaler is not None):
-#                 outputs = model(x = images, metadata = metadata)
-# #                 print(outputs)
-#                 loss = criterion(outputs, labels)
+            # Forward pass
+            with torch.cuda.amp.autocast(enabled=scaler is not None):
+                outputs = model(x = images, metadata = metadata)
+                loss = criterion(outputs, labels)
 
 
-#             # Backward pass
-#             optimizer.zero_grad()
-#             if scaler is not None:
-#                 scaler.scale(loss).backward()
-#                 scaler.unscale_(optimizer)
-#                 nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
-#                 scaler.step(optimizer)
-#                 scaler.update()
-#             else:
-#                 loss.backward()
-#                 nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
-#                 optimizer.step()
+            # Backward pass
+            optimizer.zero_grad()
+            if scaler is not None:
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
+                optimizer.step()
 
-#             # Record training loss and accuracy
-#             running_loss += loss.item()
-#             _, predicted = torch.max(outputs.data, 1)
-#             total_predictions += labels.size(0)
-# #             print(predicted.type(),labels.type())
-#             predicted = Severity_to_DRRS(predicted)
-#             labels = Severity_to_DRRS(labels)
-# #             print(predicted.type(),labels.type())
-#             correct_predictions += (predicted == labels).sum().item()
-#             labels_all.append(labels)
-#             predicted_all.append(predicted)
-# #             print(labels_all,predicted_all)
+            # Record training loss and accuracy
+            running_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total_predictions += labels.size(0)
+            predicted = Severity_to_DRRS(predicted)
+            labels = Severity_to_DRRS(labels)
+            correct_predictions += (predicted == labels).sum().item()
+            labels_all.append(labels)
+            predicted_all.append(predicted)
 
-# #         print(np.shape(labels_all),np.shape(predicted_all))
-#         labels_all =  torch.cat(labels_all, dim=0).cpu()
-#         predicted_all =  torch.cat(predicted_all, dim=0).cpu()
-#         unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
-#         unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
+        labels_all =  torch.cat(labels_all, dim=0).cpu()
+        predicted_all =  torch.cat(predicted_all, dim=0).cpu()
+        unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
+        unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
 
-# #         print(labels_all,predicted_all)
-#         print("Train Balanced accuracy: ", sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)) 
-#         print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
+        train_balanced_accuracy = sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)
         
-        
-#         if(args.lr_scheduler):
-#             lr_scheduler.step()
+        print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
+        train_loss = running_loss / len(batched_trainset)
+        train_accuracy = correct_predictions / total_predictions
+
+                
+
+        train_msg = f'Epoch: {epoch + 1}/{args.epoch} Train Loss: {train_loss}, Accuracy: {train_accuracy}, Balanced Accuracy: {train_balanced_accuracy}, time spent: {time.time() - start} s \n'
+        print(train_msg)
+        logfile.write(train_msg)
+
+        if(args.lr_scheduler):
+            lr_scheduler.step()
 
         if epoch % 1 == 0:          ## Test every epoch, can change according to requirements
             # Evaluate model on test data
@@ -199,8 +212,8 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
                 for images, labels, _ in batched_testset:
                     images = images.to(device)
                     labels = labels.to(device)
-                    metadata = torch.float(train_meta_avg, device= device)
-
+                    # metadata = torch.float(train_meta_avg, device= device)
+                    metadata = torch.from_numpy(np.tile(train_meta_avg, (len(_), 1))).to(device)
                     images = torch.flatten(images , start_dim = 1 , end_dim =2)
                     # Forward pass
                     outputs = model(images,metadata)
@@ -215,45 +228,47 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
                     test_correct_predictions += (predicted == labels).sum().item()
                     labels_all.append(labels)
                     predicted_all.append(predicted)
-#             print(labels_all,predicted_all)
 
                 labels_all =  torch.cat(labels_all, dim=0).cpu()
                 predicted_all =  torch.cat(predicted_all, dim=0).cpu()
                 test_balanced_accuracy = sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)
                 unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
                 unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
+                best_pred['label'] = labels_all
+                best_pred['prediction'] = predicted_all
+
                 with open("ViT test best.pickle",'wb') as f:
-                    pickle.dump(predicted_all, f)
-#         print(labels_all,predicted_all)
-                print(" Test output distribution for labels, predicted: ",counts_labels, counts_predicted) 
-                print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
-                print(" Test Balanced accuracy: ", test_balanced_accuracy) 
- #                     print(" predicted :", predicted)
-#                     print(" labels :", labels)
+                    pickle.dump(best_pred, f)
+
+                print(f'Test output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
             test_loss /= len(batched_testset)
             test_accuracy = test_correct_predictions / test_total_predictions
-            print(" Test Loss: ", test_loss, " Accuracy: ", test_accuracy)
-
+            
+            test_msg = f'Epoch: {epoch + 1}/{args.epoch} Test Loss: {test_loss}, Accuracy: {test_accuracy}, Balanced Accuracy: {test_balanced_accuracy}, time spent: {time.time() - start} s \n'
+            print(test_msg)
+            logfile.write(test_msg)
         # Print statistics and add to Tensorboard
         end_time = time.time()
         if best_test_accuracy < test_accuracy:
-            torch.save(model.state_dict(), args.save_pth + "_test_accuracy_" + str(test_accuracy) + ".pt")
+            best_test_accuracy = test_accuracy
+            logfile.write(f'Saving chekpoint for the model with the best test balanced accuracy {best_test_balanced_accuracy}') 
         if best_test_balanced_accuracy < test_balanced_accuracy:
-            torch.save(model.state_dict(), args.save_pth + "_test_balanced_accuracy_" + str(test_balanced_accuracy) + ".pt")
+            torch.save(model.state_dict(), args.save_pth + "_test_balanced_accuracy_"  + ".pt")
+            best_test_balanced_accuracy = test_balanced_accuracy
+            logfile.write(f'Saving chekpoint for the model with the best test balanced accuracy {best_test_balanced_accuracy}') 
 
         epoch_time = end_time - start_time
-        train_loss = running_loss / len(batched_trainset)
-        train_accuracy = correct_predictions / total_predictions
+        logfile.close()
 
-        print("Epoch: ", epoch + 1, "/", args.epoch, " Train Loss: ", train_loss, " Accuracy: ", train_accuracy,
-                
-                " time spent: ", time.time() - start, " s")
+    logfile = open(args.log, "a")
+    logfile.write(f'The model with the best test balanced accuracy {best_test_balanced_accuracy} and best test accuracy {best_test_accuracy}')
+    logfile.close()
 
-    torch.save(model.state_dict(), args.save_pth)
+    # torch.save(model.state_dict(), args.save_pth) 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type = str, default = 'maxvit')
+    parser.add_argument('--model', type = str, default = 'vit')
     parser.add_argument('--annot_train_prime', type = str, default = 'df_prime_train_features.csv')
     parser.add_argument('--annot_test_prime', type = str, default = 'df_prime_test_features.csv')
     parser.add_argument('--data_root', type = str, default = '/usr/scratch/abhimanyu/courses/ECE8803_FML/OLIVES')
@@ -267,6 +282,9 @@ def parse_args():
     parser.add_argument('--load_checkpoint', type = str, default = None)
     parser.add_argument("--lr-warmup-epochs", default=5, type=int, help="the number of epochs to warmup (default: 5)")
     parser.add_argument("--lr-min", default=1e-5, type=float, help="minimum lr of lr schedule (default: 1e-5)")
+    parser.add_argument('--loss_gamma', type = float, default = 1)
+    parser.add_argument('--meta', type = int, default = 1, help='Use metadata or not')
+    parser.add_argument('--num_meta', type = int, default = 2, help='The number of meta feauters, look at dataloader to see more. Values: 2/9')
     # Mixed precision training parameters
     parser.add_argument("--amp", action="store_true", help="Use torch.cuda.amp for mixed precision training")
     parser.add_argument("--lr_scheduler", type=bool, default = False, help="Wethear to turn of LR scheduling or not ") 
@@ -284,8 +302,13 @@ if __name__ == '__main__':
     print(f"Training {args.model} for {args.epoch} epochs. LR: {args.lr}, weight_decay = {args.weight_decay}, batch_size = {args.batch_size}. ")
     # Define transform
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    base_name = args.model + timestr + ".pth" 
+    base_name = args.model + timestr 
     name = os.path.join(args.save_pth, base_name)
+    
+
+    base_name_log = args.model + timestr + ".log"
+    name_log = os.path.join(args.save_pth, base_name_log)
+    args.log = os.path.abspath(name_log)
     args.save_pth = os.path.abspath(name)
 
     # # Define dataloader
@@ -293,10 +316,11 @@ if __name__ == '__main__':
     print("Len of Train:",len(batched_trainset)," , Len of Test dataset:",len(batched_testset))
     print(train_freq)
     print(test_freq)
-    freq = np.array(train_freq) + np.array(test_freq)
+    freq = np.array(train_freq) 
     print(freq)
     # weight = freq / np.sum(freq)
-    weight = [sum(freq) / (3 * count) for count in freq]
+    print(args.loss_gamma)
+    weight = [pow(sum(freq)/(3*count), args.loss_gamma) for count in freq]
 
     weight = torch.tensor(weight, dtype=torch.float)
     print(weight)
