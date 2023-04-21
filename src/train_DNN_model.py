@@ -15,6 +15,8 @@ import os
 import copy
 import dataloader
 
+import pickle
+
 def Severity_to_DRRS( serverity):
 #     DRSS = []
 #     for i in serverity:
@@ -122,67 +124,67 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
         labels_all =  [ ]
         predicted_all = [ ]
 
-        # Train 1 epoch
-        for images, labels, metadata in tqdm(batched_trainset, desc=f"Epoch {epoch+1}/{num_epochs}"):
-            # Move data and labels to device
-            images = images.to(device)
-            labels = labels.to(device)
-            metadata = metadata.to(device)
-            images = torch.flatten(images , start_dim = 1 , end_dim =2)
+#         # Train 1 epoch
+#         for images, labels, metadata in tqdm(batched_trainset, desc=f"Epoch {epoch+1}/{num_epochs}"):
+#             # Move data and labels to device
+#             images = images.to(device)
+#             labels = labels.to(device)
+#             metadata = metadata.to(device)
+#             images = torch.flatten(images , start_dim = 1 , end_dim =2)
 
-            has_nan = torch.isnan(metadata)
-            any_nan = torch.any(has_nan)
-            if (any_nan):
-                metadata = torch.zeros(metadata.shape, device= device)
-            else:
-                metadata = metadata.to(device)
+#             has_nan = torch.isnan(metadata)
+#             any_nan = torch.any(has_nan)
+#             if (any_nan):
+#                 metadata = torch.zeros(metadata.shape, device= device)
+#             else:
+#                 metadata = metadata.to(device)
 
-            # Forward pass
-            with torch.cuda.amp.autocast(enabled=scaler is not None):
-                outputs = model(x = images, metadata = metadata)
-#                 print(outputs)
-                loss = criterion(outputs, labels)
+#             # Forward pass
+#             with torch.cuda.amp.autocast(enabled=scaler is not None):
+#                 outputs = model(x = images, metadata = metadata)
+# #                 print(outputs)
+#                 loss = criterion(outputs, labels)
 
 
-            # Backward pass
-            optimizer.zero_grad()
-            if scaler is not None:
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
-                optimizer.step()
+#             # Backward pass
+#             optimizer.zero_grad()
+#             if scaler is not None:
+#                 scaler.scale(loss).backward()
+#                 scaler.unscale_(optimizer)
+#                 nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
+#                 scaler.step(optimizer)
+#                 scaler.update()
+#             else:
+#                 loss.backward()
+#                 nn.utils.clip_grad_norm_(model.parameters(), 1.0)       ## 1.0 is args.clip_grad_norm
+#                 optimizer.step()
 
-            # Record training loss and accuracy
-            running_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            total_predictions += labels.size(0)
-#             print(predicted.type(),labels.type())
-            predicted = Severity_to_DRRS(predicted)
-            labels = Severity_to_DRRS(labels)
-#             print(predicted.type(),labels.type())
-            correct_predictions += (predicted == labels).sum().item()
-            labels_all.append(labels)
-            predicted_all.append(predicted)
-#             print(labels_all,predicted_all)
+#             # Record training loss and accuracy
+#             running_loss += loss.item()
+#             _, predicted = torch.max(outputs.data, 1)
+#             total_predictions += labels.size(0)
+# #             print(predicted.type(),labels.type())
+#             predicted = Severity_to_DRRS(predicted)
+#             labels = Severity_to_DRRS(labels)
+# #             print(predicted.type(),labels.type())
+#             correct_predictions += (predicted == labels).sum().item()
+#             labels_all.append(labels)
+#             predicted_all.append(predicted)
+# #             print(labels_all,predicted_all)
 
-#         print(np.shape(labels_all),np.shape(predicted_all))
-        labels_all =  torch.cat(labels_all, dim=0).cpu()
-        predicted_all =  torch.cat(predicted_all, dim=0).cpu()
-        unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
-        unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
+# #         print(np.shape(labels_all),np.shape(predicted_all))
+#         labels_all =  torch.cat(labels_all, dim=0).cpu()
+#         predicted_all =  torch.cat(predicted_all, dim=0).cpu()
+#         unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
+#         unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
 
-#         print(labels_all,predicted_all)
-        print("Train Balanced accuracy: ", sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)) 
-        print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
+# #         print(labels_all,predicted_all)
+#         print("Train Balanced accuracy: ", sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)) 
+#         print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
         
         
-        if(args.lr_scheduler):
-            lr_scheduler.step()
+#         if(args.lr_scheduler):
+#             lr_scheduler.step()
 
         if epoch % 1 == 0:          ## Test every epoch, can change according to requirements
             # Evaluate model on test data
@@ -220,7 +222,8 @@ def train_dnn(args, device,batched_trainset, batched_testset, weight, train_meta
                 test_balanced_accuracy = sklearn.metrics.balanced_accuracy_score(labels_all, predicted_all)
                 unique_labels, counts_labels = np.unique(labels_all, return_counts=True)
                 unique_predicted, counts_predicted = np.unique(predicted_all, return_counts=True)
-
+                with open("ViT test best.pickle",'wb') as f:
+                    pickle.dump(predicted_all, f)
 #         print(labels_all,predicted_all)
                 print(" Test output distribution for labels, predicted: ",counts_labels, counts_predicted) 
                 print(f'Train output distribution for labels {unique_labels} : {counts_labels} , predicted {unique_predicted} : {counts_predicted}') 
