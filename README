@@ -1,3 +1,7 @@
+## Developers:
+## Abhimanyu Bambhaniya (abambhaniya3@gatech.edu)
+## Yangyu Chen (yangyuchen@gatech.edu)
+
 
 ## To download the data use the following command.
 lftp -c 'set net:idle 10
