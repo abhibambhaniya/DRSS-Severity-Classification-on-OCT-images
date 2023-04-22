@@ -31,3 +31,17 @@ python train_svm.py --data_root /storage/home/hpaceice1/shared-classes/materials
 
 ## To fit KNN
 python train_knn.py --data_root /storage/home/hpaceice1/shared-classes/materials/ece8803fml/
+
+
+## Code Reference
+https://github.com/pytorch/vision/tree/main/references/classification
+https://github.com/ellisdg/3DUnetCNN
+
+## Report
+xxx.pdf
+
+## Presentation Slide
+xxx.pptx
+
+## Slide, Ablation Studies SpreadSheet, and Presentation Video Link
+https://www.dropbox.com/sh/9tylwn155j27j7v/AACwz6B_l8CBsyggBucYJ0pza?dl=0
