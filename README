@@ -37,11 +37,11 @@ python train_knn.py --data_root /storage/home/hpaceice1/shared-classes/materials
 https://github.com/pytorch/vision/tree/main/references/classification
 https://github.com/ellisdg/3DUnetCNN
 
-## Report
-xxx.pdf
+## Final Term Report
+ECE_8803_FML_Term_Project_Report.pdf
 
 ## Presentation Slide
-xxx.pptx
+Presentation_Sildes.pdf
 
 ## Slide, Ablation Studies SpreadSheet, and Presentation Video Link
 https://www.dropbox.com/sh/9tylwn155j27j7v/AACwz6B_l8CBsyggBucYJ0pza?dl=0
